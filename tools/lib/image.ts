@@ -543,3 +543,44 @@ export function dilate(mask: Uint8Array, w: number, h: number, radius: number): 
   void w2;
   return out;
 }
+
+/** 部件分解:按颜色把主体像素聚成 k 类,返回每类的 mask 和颜色。
+ *  用于把一张彩色参考图拆成多个部件分别建模 */
+export function colorPartMasks(
+  img: RGBA,
+  mask: Uint8Array,
+  k: number,
+): { mask: Uint8Array; color: [number, number, number]; count: number }[] {
+  const { width: w, height: h, data } = img;
+  const pixels: { i: number; c: number[] }[] = [];
+  for (let i = 0; i < w * h; i++) {
+    if (mask[i] && data[i * 4 + 3] > 128) {
+      pixels.push({ i, c: [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]] });
+    }
+  }
+  if (pixels.length === 0) return [];
+  // k-means
+  const centers = dominantColors(img, mask, k);
+  const k2 = centers.length;
+  const parts: { mask: Uint8Array; color: [number, number, number]; count: number }[] = centers.map((c) => ({
+    mask: new Uint8Array(w * h),
+    color: c,
+    count: 0,
+  }));
+  for (const p of pixels) {
+    let best = 0;
+    let bestD = Infinity;
+    for (let ci = 0; ci < k2; ci++) {
+      const d = (p.c[0] - centers[ci][0]) ** 2 + (p.c[1] - centers[ci][1]) ** 2 + (p.c[2] - centers[ci][2]) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = ci;
+      }
+    }
+    parts[best].mask[p.i] = 1;
+    parts[best].count++;
+  }
+  // 过滤:面积 <2% 的碎部(通常是抗锯齿边缘)
+  const total = pixels.length;
+  return parts.filter((p) => p.count > total * 0.02);
+}

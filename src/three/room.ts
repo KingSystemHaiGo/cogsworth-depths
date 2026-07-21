@@ -6,6 +6,7 @@ import { CONFIG, PALETTE } from '../core/config.ts';
 import { toonMat, glowMat, toonGradient, makeBlobShadow } from './materials.ts';
 import { makeSteamLantern } from './factory/steamLantern.ts';
 import { makeValveWheel } from './factory/valveWheel.ts';
+import { makeWallGauge } from './factory/wallGauge.ts';
 import { makeGear, spinGears } from './factory/gears.ts';
 import { makePipeRun } from './factory/pipes.ts';
 import { SteamVent } from './factory/steam.ts';
@@ -376,23 +377,19 @@ export class Room {
       this.obstacles.push({ x: px, z: pz, r: 0.65 });
     }
 
-    // 墙面压力仪表(贴在无门墙上)
+    // 墙面压力仪表(参考图管线生成的速度表盘,贴在无门墙上)
     const gaugeWalls = (['n', 's'] as DoorSide[]).filter((s) => !doorSides.includes(s));
     if (gaugeWalls.length > 0) {
       const n = rng.int(1, 3);
       for (let i = 0; i < n; i++) {
         const side = rng.pick(gaugeWalls);
         const zPos = side === 'n' ? -d / 2 + 0.35 : d / 2 - 0.35;
-        const g = new THREE.Group();
-        const rim = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.06, 6, 16), brassMat);
-        g.add(rim);
-        const dial = new THREE.Mesh(new THREE.CircleGeometry(0.28, 14), toonMat(0xd8cdb4));
-        dial.position.z = -0.02;
-        g.add(dial);
+        const g = makeWallGauge();
+        // 表盘上加一根可动指针
         const needle = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.22, 0.02), ironMat);
         needle.geometry.translate(0, 0.09, 0);
         needle.rotation.z = rng.range(-1.2, 1.2);
-        needle.position.z = 0.02;
+        needle.position.z = 0.08;
         g.add(needle);
         g.position.set(rng.range(-w / 2 + 4, w / 2 - 4), rng.range(wallH * 0.45, wallH * 0.75), zPos);
         if (side === 's') g.rotation.y = Math.PI;

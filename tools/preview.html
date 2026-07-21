@@ -4,7 +4,7 @@
   <body style="margin: 0; background: #1a2028">
     <script type="module">
       import * as THREE from 'three';
-      import { makeTestBoiler } from '../src/three/factory/testBoiler.ts';
+      import { makeTwoToneBoiler } from '../src/three/factory/twoToneBoiler.ts';
 
       const renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(400, 500);
@@ -18,7 +18,7 @@
       const key = new THREE.DirectionalLight(0xffd9a0, 2);
       key.position.set(3, 5, 2);
       scene.add(key);
-      scene.add(makeTestBoiler());
+      scene.add(makeTwoToneBoiler());
       renderer.render(scene, cam);
       window.__ready = true;
     </script>

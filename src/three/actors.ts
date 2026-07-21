@@ -5,6 +5,7 @@ import { toonMat, glowMat, addOutlines, makeBlobShadow } from './materials.ts';
 import { makeGear } from './factory/gears.ts';
 import { makeTopHat } from './factory/topHat.ts';
 import { makeSpiderBot } from './factory/spiderBot.ts';
+import { makeTowerShield } from './factory/towerShield.ts';
 
 const brassMat = toonMat(PALETTE.brass);
 const copperMat = toonMat(PALETTE.copper);
@@ -343,9 +344,11 @@ function buildEnemyMesh(kind: EnemyKind): THREE.Group {
       const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), emberMat);
       eye.position.set(0, 1.02, 0.3);
       g.add(eye);
-      // 正面大盾(+Z 朝向)
-      const shield = new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.25, 0.12), brassMat);
-      shield.position.set(0, 0.65, 0.6);
+      // 正面大盾(参考图管线生成的圆盾,+Z 朝向)
+      const shield = makeTowerShield();
+      shield.scale.setScalar(0.85);
+      shield.rotation.x = -Math.PI / 2; // 旋成体立起朝前
+      shield.position.set(0, 0.65, 0.62);
       g.add(shield);
       const shieldRim = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.05, 6, 14), copperMat);
       shieldRim.position.set(0, 0.7, 0.67);
