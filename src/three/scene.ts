@@ -149,16 +149,13 @@ export class ThreeStage {
 
   // 画质分级(动态分辨率缩放 DRS):核显自动降档保帧率
   private qTier: 0 | 1 | 2 = 0;
-  private qBloom = true;
-  private qOutline = true;
 
-  /** 0=高(1.5x) 1=中(1.0x) 2=低(0.75x+关泛光描边) */
+  /** 0=高(1.5x) 1=中(1.0x) 2=低(0.75x)
+   *  画质优先:降档只降渲染分辨率,泛光/描边等风格化效果全部保留 */
   setQualityTier(tier: 0 | 1 | 2): void {
     if (tier === this.qTier) return;
     this.qTier = tier;
     const pr = [1.5, 1.0, 0.75][tier];
-    this.qBloom = tier < 2;
-    this.qOutline = tier < 2;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, pr));
     this.resize();
   }
@@ -266,10 +263,10 @@ export class ThreeStage {
 
   render(time = 0): void {
     // 即使关掉 Bloom 也走 composer,保证风格滤镜始终生效
-    this.bloomPass.enabled = CONFIG.bloom && this.qBloom;
+    this.bloomPass.enabled = CONFIG.bloom;
     this.bloomPass.strength = CONFIG.bloomStrength;
     this.celPass.uniforms.uPosterize.value = CONFIG.posterize;
-    this.celPass.uniforms.uOutline.value = CONFIG.styleOutline && this.qOutline ? 1 : 0;
+    this.celPass.uniforms.uOutline.value = CONFIG.styleOutline ? 1 : 0;
     this.celPass.uniforms.uPixel.value = CONFIG.pixelSize;
     this.gradePass.uniforms.uTime.value = time;
     this.gradePass.uniforms.uVignette.value = CONFIG.vignette;

@@ -102,6 +102,8 @@ async function main(): Promise<void> {
   // 暂停(Esc 或鼠标锁丢失时触发——锁定下按 Esc 浏览器会直接解锁,收不到按键)
   let pauseOpen = false;
   function openPause(): void {
+    // 已有任何界面(暂停/设置)在显示时不再重复打开,防止叠屏
+    if (document.querySelector('.screen')) return;
     // 允许从暂停或游戏中进入(后者用于设置页返回时重绘)
     if (game.state !== 'playing' && game.state !== 'paused') return;
     if (game.state === 'playing') {
@@ -123,7 +125,14 @@ async function main(): Promise<void> {
     );
   }
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Escape') openPause();
+    if (e.code !== 'Escape') return;
+    if (game.state === 'paused' && pauseOpen) {
+      // 暂停中再按 Esc = 继续
+      const resumeBtn = document.querySelector('#resume-btn') as HTMLElement | null;
+      resumeBtn?.click();
+      return;
+    }
+    openPause();
   });
   // 锁定丢失(如锁定下按 Esc)且仍在游戏中 → 弹出暂停
   document.addEventListener('pointerlockchange', () => {
@@ -200,17 +209,18 @@ async function main(): Promise<void> {
     if (dt > 0) emaFps = emaFps * 0.95 + (1 / dt) * 0.05;
     if (CONFIG.quality !== 'auto') return;
     const tier = stage.qualityTier;
-    if (emaFps < 48 && tier < 2) {
+    // 画质优先:只有帧率明显不够(<42)才降档,升档也偏保守
+    if (emaFps < 42 && tier < 2) {
       lowTimer += dt;
       highTimer = 0;
-      if (lowTimer > 2) {
+      if (lowTimer > 2.5) {
         stage.setQualityTier((tier + 1) as 0 | 1 | 2);
         lowTimer = 0;
       }
-    } else if (emaFps > 57 && tier > 0) {
+    } else if (emaFps > 56 && tier > 0) {
       highTimer += dt;
       lowTimer = 0;
-      if (highTimer > 10) {
+      if (highTimer > 8) {
         stage.setQualityTier((tier - 1) as 0 | 1 | 2);
         highTimer = 0;
       }
