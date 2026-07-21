@@ -207,6 +207,7 @@ export class Game {
   }
 
   private newFloor(): void {
+    music.setFloorTheme(this.floorIndex);
     this.rng = new RNG(`${this.seed}#${this.floorIndex}`);
     const roomCount = BALANCE.roomCount(this.floorIndex);
     this.floor = generateFloor(this.rng, roomCount);
@@ -249,6 +250,7 @@ export class Game {
     this.overlay.clearFx();
     this.overlay.hideBossHp();
 
+    this.stage.setDanger(false);
     const node = this.floor.rooms[nodeId];
     this.currentNode = node;
     const doorSides = Object.keys(node.links) as DoorSide[];
@@ -1156,6 +1158,7 @@ export class Game {
     if (!e.enraged && e.hp < e.maxHp * 0.5) {
       e.enraged = true;
       e.speed *= 1.4;
+      this.stage.setDanger(true);
       synth.explosion();
       this.stage.shake(1.2);
       this.overlay.flash(0xff5522, 0.35);
@@ -1220,6 +1223,7 @@ export class Game {
     if (!e.enraged && e.hp < e.maxHp * 0.5) {
       e.enraged = true;
       e.speed *= 1.4;
+      this.stage.setDanger(true);
       synth.explosion();
       this.stage.shake(1.2);
       this.overlay.flash(0xff5522, 0.35);
@@ -1285,6 +1289,7 @@ export class Game {
     if (!e.enraged && e.hp < e.maxHp * 0.5) {
       e.enraged = true;
       e.speed *= 1.5;
+      this.stage.setDanger(true);
       synth.explosion();
       this.stage.shake(1.2);
       this.overlay.shake(16);

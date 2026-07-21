@@ -213,6 +213,13 @@ export class ThreeStage {
     this.composer.addPass(this.gradePass);
   }
 
+  /** Boss 二阶段:场景转入危险模式(雾与背景变暗红) */
+  setDanger(on: boolean): void {
+    const bg = on ? 0x1c0806 : PALETTE.bg;
+    (this.scene.background as THREE.Color).set(bg);
+    (this.scene.fog as THREE.FogExp2).color.set(bg);
+  }
+
   updateCameraFrustum(): void {
     const aspect = window.innerWidth / window.innerHeight;
     const h = CONFIG.viewHeight / 2;

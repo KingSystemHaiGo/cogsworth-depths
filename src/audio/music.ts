@@ -1,11 +1,18 @@
 // 程序化背景音乐:前瞻调度器 + 方波 bass/琶音 + 合成鼓组,蒸汽朋克工业 loop
 import { CONFIG } from '../core/config.ts';
 
-const BPM = 112;
+let BPM = 112;
+/** 每层主题:移调(半音)与速度系数,氛围各不相同 */
+const FLOOR_THEMES = [
+  { transpose: 0, bpmScale: 1 }, // 下水道:原版阴郁
+  { transpose: 2, bpmScale: 1.15 }, // 工厂:更快更机械
+  { transpose: 5, bpmScale: 0.85 }, // 剧场:更慢更戏剧
+  { transpose: -2, bpmScale: 1.1 }, // 锅炉之心:更低更沉
+];
 const STEPS_PER_BAR = 16;
 const BARS = 8;
 const LOOP_STEPS = STEPS_PER_BAR * BARS;
-const STEP_DUR = 60 / BPM / 4; // 16 分音符
+const STEP_DUR = (): number => 60 / BPM / 4; // 16 分音符(随主题变速)
 
 // D 自然小调
 const midi = (m: number): number => 440 * Math.pow(2, (m - 69) / 12);
@@ -45,9 +52,17 @@ class Music {
   private nextT = 0;
   /** 0=探索 1=Boss 战(加锯齿低音层 + 踩镲加倍) */
   intensity = 0;
+  private transpose = 0;
 
   setIntensity(level: number): void {
     this.intensity = level;
+  }
+
+  /** 楼层主题变奏:移调 + 变速 */
+  setFloorTheme(floor: number): void {
+    const theme = FLOOR_THEMES[Math.min(floor - 1, FLOOR_THEMES.length - 1)];
+    this.transpose = theme.transpose;
+    BPM = 112 * theme.bpmScale;
   }
 
   init(ctx: AudioContext, destination: AudioNode): void {
@@ -85,7 +100,7 @@ class Music {
     while (this.nextT < this.ctx.currentTime + 0.15) {
       this.playStep(this.step % LOOP_STEPS, this.nextT);
       this.step++;
-      this.nextT += STEP_DUR;
+      this.nextT += STEP_DUR();
     }
   }
 
@@ -102,11 +117,11 @@ class Music {
     if (this.intensity >= 1 && bar16 % 2 === 1) this.hat(t, 0.04);
 
     const b = BASS[s];
-    if (b) this.pluck(t, midi(b), 'square', 0.22, STEP_DUR * 1.8, 300);
+    if (b) this.pluck(t, midi(b + this.transpose), 'square', 0.22, STEP_DUR() * 1.8, 300);
     // Boss 战锯齿低音层
-    if (this.intensity >= 1 && b) this.pluck(t, midi(b - 12), 'sawtooth', 0.12, STEP_DUR * 1.8, 500);
+    if (this.intensity >= 1 && b) this.pluck(t, midi(b - 12 + this.transpose), 'sawtooth', 0.12, STEP_DUR() * 1.8, 500);
     const a = ARP[s];
-    if (a) this.pluck(t, midi(a), 'square', 0.09, STEP_DUR * 1.2, 2200);
+    if (a) this.pluck(t, midi(a + this.transpose), 'square', 0.09, STEP_DUR() * 1.2, 2200);
   }
 
   private kick(t: number): void {

@@ -252,9 +252,10 @@ class Synth {
     o.stop(t + 0.22);
   }
 
-  /** 环境蒸汽底噪(循环,音量极低) */
+  /** 环境声分层:蒸汽底噪 + 低频锅炉轰鸣 + 随机远处金属声 */
   startAmbient(): void {
     if (!this.ctx) return;
+    // 层 1:蒸汽底噪(已有)
     const n = this.noise(1);
     const f = this.ctx.createBiquadFilter();
     f.type = 'bandpass';
@@ -263,7 +264,6 @@ class Synth {
     n.connect(f);
     const g = this.ctx.createGain();
     g.gain.value = 0.02;
-    // LFO 让底噪有呼吸感
     const lfo = this.osc('sine', 0.13);
     const lfoGain = this.ctx.createGain();
     lfoGain.gain.value = 0.012;
@@ -273,6 +273,38 @@ class Synth {
     g.connect(this.master!);
     n.start();
     lfo.start();
+
+    // 层 2:低频锅炉轰鸣(持续的压迫感)
+    const rumble = this.osc('sine', 42);
+    const rumbleGain = this.ctx.createGain();
+    rumbleGain.gain.value = 0.035;
+    const rumbleLfo = this.osc('sine', 0.07);
+    const rumbleLfoGain = this.ctx.createGain();
+    rumbleLfoGain.gain.value = 0.015;
+    rumbleLfo.connect(rumbleLfoGain);
+    rumbleLfoGain.connect(rumbleGain.gain);
+    rumble.connect(rumbleGain);
+    rumbleGain.connect(this.master!);
+    rumble.start();
+    rumbleLfo.start();
+
+    // 层 3:随机远处金属声(每 6~14 秒一声轻 klank)
+    const clank = (): void => {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const fr = [523, 659, 440, 784][Math.floor(Math.random() * 4)];
+      const o = this.osc('triangle', fr);
+      const og = this.ctx.createGain();
+      og.gain.setValueAtTime(0.0001, t);
+      og.gain.exponentialRampToValueAtTime(0.03 + Math.random() * 0.02, t + 0.01);
+      og.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+      o.connect(og);
+      og.connect(this.master!);
+      o.start(t);
+      o.stop(t + 1.3);
+      setTimeout(clank, 6000 + Math.random() * 8000);
+    };
+    setTimeout(clank, 4000);
   }
 }
 
