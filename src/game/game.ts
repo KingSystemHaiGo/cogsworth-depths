@@ -127,6 +127,10 @@ export class Game {
   private mortarShells: { sx: number; sz: number; tx: number; tz: number; x: number; z: number; t: number; mesh: THREE.Mesh }[] = [];
   /** 蒸汽喷射机关:周期性喷发的地面喷口 */
   private steamJets: { x: number; z: number; vent: SteamVent; timer: number; phase: number }[] = [];
+  /** 毒潭(下水道层):站在里面持续掉血 */
+  private puddles: { x: number; z: number; r: number; tick: number; mesh: THREE.Mesh }[] = [];
+  /** 传送带(工厂层):持续推动玩家 */
+  private belts: { x: number; z: number; w: number; d: number; dir: 1 | -1; mesh: THREE.Mesh }[] = [];
   cogs = 0; // 齿轮币
   private exitPortal: THREE.Group | null = null;
   private dashT = 0;
@@ -242,6 +246,10 @@ export class Game {
     this.mortarShells = [];
     for (const j of this.steamJets) this.stage.scene.remove(j.vent);
     this.steamJets = [];
+    for (const p of this.puddles) this.stage.scene.remove(p.mesh);
+    this.puddles = [];
+    for (const b of this.belts) this.stage.scene.remove(b.mesh);
+    this.belts = [];
     this.clearBullets();
     if (this.exitPortal) {
       this.stage.scene.remove(this.exitPortal);
@@ -301,8 +309,49 @@ export class Game {
         this.stage.scene.add(vent);
         this.steamJets.push({ x: jx, z: jz, vent, timer: this.rng.range(0, 2), phase: 0 });
       }
+      this.setupFloorHazards();
     }
     this.overlay.setMinimap(this.floor.rooms, nodeId);
+  }
+
+  /** 每层主题玩法:下水道毒潭 / 工厂传送带(剧场与锅炉层用蒸汽机关) */
+  private setupFloorHazards(): void {
+    const theme = (this.floorIndex - 1) % 4;
+    if (theme === 0) {
+      // 毒潭:1-2 处,站在里面持续掉血
+      const count = this.rng.int(1, 2);
+      for (let i = 0; i < count; i++) {
+        const px = this.rng.range(-CONFIG.roomW / 2 + 5, CONFIG.roomW / 2 - 5);
+        const pz = this.rng.range(-CONFIG.roomD / 2 + 4, CONFIG.roomD / 2 - 4);
+        if (Math.hypot(px, pz) < 3.5 || this.insideObstacle(px, pz)) continue;
+        const mesh = new THREE.Mesh(
+          new THREE.CircleGeometry(2, 20),
+          new THREE.MeshBasicMaterial({ color: 0x3a7a3a, transparent: true, opacity: 0.4, depthWrite: false }),
+        );
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.position.set(px, 0.04, pz);
+        mesh.userData.noOutline = true;
+        this.stage.scene.add(mesh);
+        this.puddles.push({ x: px, z: pz, r: 2, tick: 0, mesh });
+      }
+    } else if (theme === 1) {
+      // 传送带:一条横贯房间,持续推动
+      const dir = this.rng.pick([-1, 1] as const);
+      const bz = this.rng.range(-CONFIG.roomD / 4, CONFIG.roomD / 4);
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(CONFIG.roomW * 0.7, 0.06, 2.2),
+        new THREE.MeshToonMaterial({ color: 0x2a3440 }),
+      );
+      mesh.position.set(0, 0.03, bz);
+      this.stage.scene.add(mesh);
+      const arrows = new THREE.Mesh(
+        new THREE.BoxGeometry(CONFIG.roomW * 0.7, 0.02, 0.4),
+        new THREE.MeshBasicMaterial({ color: 0xb08d57 }),
+      );
+      arrows.position.set(0, 0.07, bz);
+      this.stage.scene.add(arrows);
+      this.belts.push({ x: 0, z: bz, w: CONFIG.roomW * 0.7, d: 2.2, dir, mesh });
+    }
   }
 
   /** 宝箱房:中央一只免费改装宝箱;商店:三个商品台座 */
@@ -478,8 +527,18 @@ export class Game {
    *  预警圈与怪物一一对应,位置避开障碍物和玩家 */
   private scheduleWave(forced: EnemyKind | null): void {
     this.wavesDone++;
+    // 组合波次(2 层起 40% 概率):有配合设计的怪物小队
+    let pack: EnemyKind[] | null = null;
+    if (!forced && this.floorIndex >= 2 && this.rng.chance(0.4)) {
+      const packs: EnemyKind[][] = [
+        ['tinker', 'chaser', 'chaser', 'chaser'], // 修理班:无人机后勤
+        ['mortar', 'mortar', 'dasher', 'dasher'], // 炮击组:火力覆盖
+        ['warden', 'shooter', 'shooter'], // 盾墙:正面推进
+      ];
+      pack = this.rng.pick(packs);
+    }
     for (let i = 0; i < this.waveSize; i++) {
-      const kind = forced ?? this.pickEnemyKind();
+      const kind = forced ?? pack?.[i % pack.length] ?? this.pickEnemyKind();
       let x = 0;
       let z = -4;
       if (!forced) {
@@ -626,6 +685,7 @@ export class Game {
     this.updateInteractives(dt, time);
     this.refreshPlayerAttachments();
     this.updateSteamJets(dt, time);
+    this.updateFloorHazards(dt);
     // 敌人头顶血条(只显示受伤的,Boss 用底部大血条)
     this.enemyHpList.length = 0;
     for (const e of this.enemies) {
@@ -2013,6 +2073,23 @@ export class Game {
     bubble.visible = this.stats.shield > 0 && this.player.shieldUp;
     if (bubble.visible) {
       bubble.scale.setScalar(1 + Math.sin(performance.now() / 300) * 0.03);
+    }
+  }
+
+  /** 每层主题玩法效果:毒潭掉血 / 传送带推动 */
+  private updateFloorHazards(dt: number): void {
+    const p = this.player;
+    for (const pd of this.puddles) {
+      pd.tick -= dt;
+      if (Math.hypot(p.x - pd.x, p.z - pd.z) < pd.r && pd.tick <= 0 && p.invuln <= 0) {
+        pd.tick = 0.5;
+        this.hurtPlayer(4);
+      }
+    }
+    for (const b of this.belts) {
+      if (Math.abs(p.x - b.x) < b.w / 2 && Math.abs(p.z - b.z) < b.d / 2) {
+        p.x += b.dir * 2.2 * dt;
+      }
     }
   }
 
