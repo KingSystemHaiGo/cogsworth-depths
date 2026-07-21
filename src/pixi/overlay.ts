@@ -36,6 +36,11 @@ interface Ring {
   color: number;
 }
 
+interface Banner {
+  text: Text;
+  t: number;
+}
+
 /** 世界→屏幕坐标转换由外部注入(来自 ThreeStage) */
 export type WorldToScreen = (x: number, z: number, out: { x: number; y: number }) => void;
 
@@ -54,6 +59,7 @@ export class Overlay {
   private damageNumbers: DamageNumber[] = [];
   private sparks: Spark[] = [];
   private rings: Ring[] = [];
+  private banners: Banner[] = [];
   private flashGfx = new Graphics();
   private flashAlpha = 0;
   private flashColor = 0xffffff;
@@ -220,6 +226,26 @@ export class Overlay {
       baseScale: crit ? 1.35 : 1,
       crit,
     });
+  }
+
+  /** Boss 横幅:大号居中文字,2 秒淡入淡出 */
+  banner(str: string): void {
+    const text = new Text({
+      text: str,
+      style: new TextStyle({
+        fontFamily: 'Georgia, serif',
+        fontSize: 46,
+        fontWeight: 'bold',
+        fill: 0xffb0a0,
+        letterSpacing: 6,
+        stroke: { color: 0x1a0a08, width: 6 },
+        dropShadow: { color: 0xff3300, blur: 16, distance: 0 },
+      }),
+    });
+    text.anchor.set(0.5);
+    text.position.set(this.app.screen.width / 2, this.app.screen.height * 0.3);
+    this.fxLayer.addChild(text);
+    this.banners.push({ text, t: 0 });
   }
 
   /** 漂浮文字(价格标签/提示),不消失直到 clearFx */
@@ -475,9 +501,11 @@ export class Overlay {
     for (const d of this.damageNumbers) d.text.destroy();
     for (const s of this.sparks) s.gfx.destroy();
     for (const r of this.rings) r.gfx.destroy();
+    for (const b of this.banners) b.text.destroy();
     this.damageNumbers.length = 0;
     this.sparks.length = 0;
     this.rings.length = 0;
+    this.banners.length = 0;
     this.enemyHpGfx.clear();
   }
 
@@ -569,6 +597,20 @@ export class Overlay {
       const t = r.life / r.maxLife;
       r.gfx.clear();
       r.gfx.circle(r.x, r.y, r.r).stroke({ color: r.color, width: 3 * t + 1, alpha: t * 0.9 });
+    }
+
+    // Boss 横幅:淡入 0.3s → 停留 → 淡出 0.5s,共 2s
+    for (let i = this.banners.length - 1; i >= 0; i--) {
+      const b = this.banners[i];
+      b.t += dt;
+      const inT = Math.min(1, b.t / 0.3);
+      const outT = b.t > 1.5 ? Math.max(0, 1 - (b.t - 1.5) / 0.5) : 1;
+      b.text.alpha = inT * outT;
+      b.text.scale.set(0.8 + inT * 0.2);
+      if (b.t > 2) {
+        b.text.destroy();
+        this.banners.splice(i, 1);
+      }
     }
 
     // 震屏

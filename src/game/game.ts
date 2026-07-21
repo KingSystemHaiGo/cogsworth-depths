@@ -35,6 +35,8 @@ interface Enemy {
   stateT: number; // boss 状态计时
   phase: number; // boss 阶段
   enraged: boolean; // boss 二阶段
+  spawnT: number; // 出生入场动画剩余时间
+  hitPop: number; // 受击挤压脉冲 0..1
 }
 
 interface Bullet {
@@ -93,6 +95,8 @@ export class Game {
     mesh: null as THREE.Group | null,
     x: 0,
     z: 0,
+    vx: 0,
+    vz: 0,
     hp: CONFIG.playerHp,
     fireCd: 0,
     invuln: 0,
@@ -105,6 +109,12 @@ export class Game {
   stats: PlayerStats = this.baseStats();
 
   private enemies: Enemy[] = [];
+  private pendingSpawns: { kind: EnemyKind; x: number; z: number; t: number }[] = [];
+  private wavesTotal = 0;
+  private wavesDone = 0;
+  private waveSize = 0;
+  private waveBreather = 0;
+  private dying: { mesh: THREE.Group; t: number }[] = [];
   private playerBullets: Bullet[] = [];
   private enemyBullets: Bullet[] = [];
   private drops: Drop[] = [];
@@ -207,6 +217,9 @@ export class Game {
     if (this.room) this.stage.scene.remove(this.room.group);
     for (const e of this.enemies) this.stage.scene.remove(e.mesh);
     this.enemies = [];
+    this.pendingSpawns = [];
+    for (const d of this.dying) this.stage.scene.remove(d.mesh);
+    this.dying = [];
     for (const d of this.drops) this.stage.scene.remove(d.mesh);
     this.drops = [];
     for (const it of this.interactives) this.stage.scene.remove(it.mesh);
@@ -238,7 +251,7 @@ export class Game {
       this.stage.scene.add(this.player.mesh);
     }
 
-    if (!node.cleared) this.spawnEnemies(node);
+    if (!node.cleared) this.startWaves(node);
     if (node.kind === 'boss') this.overlay.setBossHp(t('boss.name'), 1);
     // 特殊房间:宝箱/商店,无敌人,门常开
     if (node.kind === 'treasure' || node.kind === 'shop') {
@@ -374,34 +387,55 @@ export class Game {
     }
   }
 
-  private spawnEnemies(node: RoomNode): void {
-    const hpScale = BALANCE.hpScale(this.floorIndex);
+  /** 波次遭遇:进场只出第一波,清完间歇后出下一波(参考 Hades 房间节奏) */
+  private startWaves(node: RoomNode): void {
+    this.wavesDone = 0;
+    this.waveBreather = 0;
     if (node.kind === 'boss') {
-      this.spawnEnemy('boss', 0, -4, hpScale);
-      return;
+      this.wavesTotal = 1;
+      this.waveSize = 1;
+      // Boss 落场前的横幅预警
+      this.overlay.banner(t('boss.name'));
+      this.stage.shake(0.6);
+    } else {
+      const count = BALANCE.spawnCount(this.floorIndex, (a, b) => this.rng.int(a, b));
+      this.wavesTotal = this.floorIndex >= 4 ? 3 : this.floorIndex >= 2 ? 2 : 1;
+      this.waveSize = Math.ceil(count / this.wavesTotal);
     }
-    const count = BALANCE.spawnCount(this.floorIndex, (a, b) => this.rng.int(a, b));
-    for (let i = 0; i < count; i++) {
-      const roll = this.rng.next();
-      // 第 2 层起加入跳蚤和分裂球
-      let kind: EnemyKind;
-      if (this.floorIndex >= 3) {
-        kind =
-          roll < 0.3 ? 'chaser' : roll < 0.48 ? 'shooter' : roll < 0.58 ? 'bomber' : roll < 0.72 ? 'dasher' : roll < 0.84 ? 'splitter' : roll < 0.92 ? 'warden' : 'mortar';
-      } else if (this.floorIndex >= 2) {
-        kind =
-          roll < 0.38 ? 'chaser' : roll < 0.6 ? 'shooter' : roll < 0.72 ? 'bomber' : roll < 0.86 ? 'dasher' : 'splitter';
-      } else {
-        kind = roll < 0.55 ? 'chaser' : roll < 0.82 ? 'shooter' : 'bomber';
-      }
+    this.scheduleWave(node.kind === 'boss' ? 'boss' : null);
+  }
+
+  /** 当前层数的敌人种类配比 */
+  private pickEnemyKind(): EnemyKind {
+    const roll = this.rng.next();
+    if (this.floorIndex >= 3) {
+      return roll < 0.3 ? 'chaser' : roll < 0.48 ? 'shooter' : roll < 0.58 ? 'bomber' : roll < 0.72 ? 'dasher' : roll < 0.84 ? 'splitter' : roll < 0.92 ? 'warden' : 'mortar';
+    }
+    if (this.floorIndex >= 2) {
+      return roll < 0.38 ? 'chaser' : roll < 0.6 ? 'shooter' : roll < 0.72 ? 'bomber' : roll < 0.86 ? 'dasher' : 'splitter';
+    }
+    return roll < 0.55 ? 'chaser' : roll < 0.82 ? 'shooter' : 'bomber';
+  }
+
+  /** 出一波:先打预警圈(≥0.55s,给玩家反应窗口),敌人错落现身 */
+  private scheduleWave(forced: EnemyKind | null): void {
+    this.wavesDone++;
+    for (let i = 0; i < this.waveSize; i++) {
+      const kind = forced ?? this.pickEnemyKind();
       let x = 0;
-      let z = 0;
-      for (let tries = 0; tries < 10; tries++) {
-        x = this.rng.range(-CONFIG.roomW / 2 + 3, CONFIG.roomW / 2 - 3);
-        z = this.rng.range(-CONFIG.roomD / 2 + 3, CONFIG.roomD / 2 - 3);
-        if (Math.hypot(x - this.player.x, z - this.player.z) > 6) break;
+      let z = -4;
+      if (!forced) {
+        for (let tries = 0; tries < 10; tries++) {
+          x = this.rng.range(-CONFIG.roomW / 2 + 3, CONFIG.roomW / 2 - 3);
+          z = this.rng.range(-CONFIG.roomD / 2 + 3, CONFIG.roomD / 2 - 3);
+          if (Math.hypot(x - this.player.x, z - this.player.z) > 6) break;
+        }
       }
-      this.spawnEnemy(kind, x, z, hpScale);
+      const delay = (kind === 'boss' ? 1.2 : 0.55) + i * 0.12;
+      this.pendingSpawns.push({ kind, x, z, t: delay });
+      const tmp = { x: 0, y: 0 };
+      this.worldToScreen(x, z, tmp);
+      this.overlay.ring(tmp.x, tmp.y, kind === 'boss' ? 0xff5522 : 0xff7733, kind === 'boss' ? 90 : 40, delay);
     }
   }
 
@@ -429,6 +463,8 @@ export class Game {
       stateT: 0,
       phase: 0,
       enraged: false,
+      spawnT: kind === 'boss' ? 0.5 : 0.22,
+      hitPop: 0,
     });
   }
 
@@ -489,18 +525,62 @@ export class Game {
       1 - Math.max(0, this.rollCd) / BALANCE.player.rollCd,
     );
 
-    // 房间清除判定
-    if (this.currentNode && !this.currentNode.cleared && this.enemies.length === 0) {
-      this.onRoomCleared();
+    // 房间清除判定:场上无敌人且无待生成才算
+    if (this.currentNode && !this.currentNode.cleared) {
+      // 待生成队列:预警圈结束后敌人才现身
+      for (let i = this.pendingSpawns.length - 1; i >= 0; i--) {
+        const s = this.pendingSpawns[i];
+        s.t -= dt;
+        if (s.t <= 0) {
+          this.spawnEnemy(s.kind, s.x, s.z, BALANCE.hpScale(this.floorIndex));
+          this.pendingSpawns.splice(i, 1);
+          synth.doorOpen();
+        }
+      }
+      if (this.enemies.length === 0 && this.pendingSpawns.length === 0) {
+        if (this.wavesDone >= this.wavesTotal) {
+          this.onRoomCleared();
+        } else {
+          // 波次间歇:给玩家 0.9s 喘息
+          this.waveBreather -= dt;
+          if (this.waveBreather <= 0) {
+            this.scheduleWave(null);
+            this.waveBreather = 0.9;
+          }
+        }
+      } else {
+        this.waveBreather = 0.9;
+      }
+    }
+
+    // 死亡爆散动画(缩小旋转消散)
+    for (let i = this.dying.length - 1; i >= 0; i--) {
+      const d = this.dying[i];
+      d.t += dt;
+      const s = Math.max(0.01, 1 - d.t / 0.16);
+      d.mesh.scale.setScalar(s);
+      d.mesh.rotation.y += dt * 14;
+      if (d.t >= 0.16) {
+        this.stage.scene.remove(d.mesh);
+        this.dying.splice(i, 1);
+      }
     }
 
     this.overlay.setHUD(
       this.player.hp,
       this.stats.maxHp,
       this.floorIndex,
-      this.currentNode ? roomLabel(this.currentNode) : '',
+      this.currentNode ? this.hudRoomLabel(this.currentNode) : '',
       this.cogs,
     );
+  }
+
+  /** HUD 房间标签:战斗中显示波次进度 */
+  private hudRoomLabel(node: RoomNode): string {
+    if (!node.cleared && node.kind === 'normal' && this.wavesTotal > 1) {
+      return t('hud.wave', { a: Math.min(this.wavesDone, this.wavesTotal), b: this.wavesTotal });
+    }
+    return roomLabel(node);
   }
 
   private updatePlayer(dt: number): void {
@@ -565,8 +645,12 @@ export class Game {
         this.overlay.sparkBurst(tmp.x, tmp.y, 0x6a7a86, 1);
       }
     } else {
-      p.x += axis.x * this.stats.speed * dt;
-      p.z += axis.y * this.stats.speed * dt;
+      // 速度平滑趋近(急停急起有质量感,但不拖泥带水)
+      const k = Math.min(1, dt * 16);
+      p.vx += (axis.x * this.stats.speed - p.vx) * k;
+      p.vz += (axis.y * this.stats.speed - p.vz) * k;
+      p.x += p.vx * dt;
+      p.z += p.vz * dt;
     }
     p.x = this.collideWorld(p.x, p.z, 0.5).x;
     p.z = this.collideWorld(p.x, p.z, 0.5).z;
@@ -679,6 +763,21 @@ export class Game {
     const p = this.player;
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
+      // 出生入场:从预警圈中弹出,期间不行动
+      if (e.spawnT > 0) {
+        e.spawnT -= dt;
+        const prog = 1 - Math.max(0, e.spawnT) / (e.kind === 'boss' ? 0.5 : 0.22);
+        e.mesh.scale.setScalar(0.3 + 0.7 * prog);
+        e.mesh.position.set(e.x, 0, e.z);
+        continue;
+      }
+      // 受击挤压脉冲(squash & stretch 手感)
+      if (e.hitPop > 0) {
+        e.hitPop = Math.max(0, e.hitPop - dt * 6);
+        e.mesh.scale.set(1 + 0.22 * e.hitPop, 1 - 0.15 * e.hitPop, 1 + 0.22 * e.hitPop);
+      } else if (e.mesh.scale.x !== 1) {
+        e.mesh.scale.set(1, 1, 1);
+      }
       const dx = p.x - e.x;
       const dz = p.z - e.z;
       const dist = Math.hypot(dx, dz) || 0.001;
@@ -1045,6 +1144,7 @@ export class Game {
       e.kbz += (dirZ / v) * 7;
     }
     synth.hit();
+    e.hitPop = 1; // 受击挤压
     this.overlay.damageNumber(e.x, e.z, dmg, crit);
     const tmp = { x: 0, y: 0 };
     this.worldToScreen(e.x, e.z, tmp);
@@ -1059,7 +1159,8 @@ export class Game {
     this.overlay.sparkBurst(tmp.x, tmp.y, e.kind === 'bomber' ? 0xff7733 : 0xffcc88, 18);
     // 击杀冲击波环 + 顿帧,爆发力核心
     this.overlay.ring(tmp.x, tmp.y, e.kind === 'boss' ? 0xffb347 : 0xffd980, e.kind === 'boss' ? 160 : 80);
-    this.stage.scene.remove(e.mesh);
+    // 死亡爆散:交给 dying 队列做缩小旋转消散
+    this.dying.push({ mesh: e.mesh, t: 0 });
     this.enemies.splice(idx, 1);
 
     // 分裂球死亡:裂成两只小蜘蛛

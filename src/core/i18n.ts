@@ -56,6 +56,7 @@ const TEXTS = {
   'room.combat': { zh: '战斗中!', en: 'In combat!' },
   'hud.floor': { zh: '第 {n} 层', en: 'Floor {n}' },
   'hud.combo': { zh: '连击', en: 'combo' },
+  'hud.wave': { zh: '第 {a}/{b} 波', en: 'Wave {a}/{b}' },
 
   'boss.name': { zh: '锅炉魔像 · 柯格斯沃斯', en: 'Boiler Golem · COGSWORTH' },
 
