@@ -10,6 +10,9 @@ export interface RoomNode {
   /** 邻居房间 id(生成后填充) */
   links: Partial<Record<DoorSide, number>>;
   cleared: boolean;
+  /** 波次进度:中途离开后重进时恢复,不重置 */
+  wavesSpawned: number;
+  waveSize: number;
 }
 
 export interface Floor {
@@ -32,7 +35,7 @@ export function generateFloor(rng: RNG, roomCount: number): Floor {
   const rooms: RoomNode[] = [];
   const byPos = new Map<string, RoomNode>();
 
-  const start: RoomNode = { id: 0, gx: 0, gy: 0, kind: 'start', links: {}, cleared: true };
+  const start: RoomNode = { id: 0, gx: 0, gy: 0, kind: 'start', links: {}, cleared: true, wavesSpawned: 0, waveSize: 0 };
   rooms.push(start);
   byPos.set(key(0, 0), start);
 
@@ -49,7 +52,7 @@ export function generateFloor(rng: RNG, roomCount: number): Floor {
       cur = existing;
       continue;
     }
-    const node: RoomNode = { id: rooms.length, gx: nx, gy: ny, kind: 'normal', links: {}, cleared: false };
+    const node: RoomNode = { id: rooms.length, gx: nx, gy: ny, kind: 'normal', links: {}, cleared: false, wavesSpawned: 0, waveSize: 0 };
     rooms.push(node);
     byPos.set(key(nx, ny), node);
     cur.links[dir.side] = node.id;
@@ -80,7 +83,7 @@ function attachSpecial(
     const nx = base.gx + dir.dx;
     const ny = base.gy + dir.dy;
     if (byPos.has(key(nx, ny))) continue;
-    const node: RoomNode = { id: rooms.length, gx: nx, gy: ny, kind, links: {}, cleared: false };
+    const node: RoomNode = { id: rooms.length, gx: nx, gy: ny, kind, links: {}, cleared: false, wavesSpawned: 0, waveSize: 0 };
     rooms.push(node);
     byPos.set(key(nx, ny), node);
     base.links[dir.side] = node.id;

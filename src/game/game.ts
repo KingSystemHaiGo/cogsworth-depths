@@ -233,6 +233,11 @@ export class Game {
 
   private loadRoom(nodeId: number, enterFrom: DoorSide | null): void {
     if (!this.floor) return;
+    // 离开前保存波次进度(中途离开再回来不重打已过的波次)
+    if (this.currentNode && !this.currentNode.cleared) {
+      this.currentNode.wavesSpawned = this.wavesDone;
+      this.currentNode.waveSize = this.waveSize;
+    }
     // 清理旧房间
     if (this.room) this.stage.scene.remove(this.room.group);
     for (const e of this.enemies) this.stage.scene.remove(e.mesh);
@@ -273,8 +278,10 @@ export class Game {
       this.stage.scene.add(this.player.mesh);
     }
 
-    if (!node.cleared) this.startWaves(node);
-    if (node.kind === 'boss') {
+    // 只有战斗房和 Boss 房生成波次;宝箱/商店不生成怪物,也不该有预警
+    if (!node.cleared && (node.kind === 'normal' || node.kind === 'boss')) this.startWaves(node);
+    // Boss 房只在未清时亮血条和战歌(清空后再进不应触发)
+    if (node.kind === 'boss' && !node.cleared) {
       this.overlay.setBossHp(this.floorIndex % 2 === 0 ? t('boss2.name') : t('boss.name'), 1);
       music.setIntensity(1);
     } else {
@@ -447,7 +454,15 @@ export class Game {
     }
     const count = BALANCE.spawnCount(this.floorIndex, (a, b) => this.rng.int(a, b));
     this.wavesTotal = this.floorIndex >= 4 ? 3 : this.floorIndex >= 2 ? 2 : 1;
-    this.waveSize = Math.ceil(count / this.wavesTotal);
+    this.waveSize = node.waveSize > 0 ? node.waveSize : Math.ceil(count / this.wavesTotal);
+    // 恢复中途离开时的波次进度
+    this.wavesDone = Math.min(node.wavesSpawned, this.wavesTotal);
+    node.waveSize = this.waveSize;
+    if (this.wavesDone >= this.wavesTotal) {
+      // 波次已经全部出完了(可能之前全灭过一波),不再重复生成
+      return;
+    }
+    this.waveSize = Math.min(this.waveSize, count);
     this.scheduleWave(null);
   }
 
@@ -463,7 +478,8 @@ export class Game {
     return roll < 0.55 ? 'chaser' : roll < 0.82 ? 'shooter' : 'bomber';
   }
 
-  /** 出一波:先打预警圈(≥0.55s,给玩家反应窗口),敌人错落现身 */
+  /** 出一波:先打预警圈(≥0.55s,给玩家反应窗口),敌人错落现身。
+   *  预警圈与怪物一一对应,位置避开障碍物和玩家 */
   private scheduleWave(forced: EnemyKind | null): void {
     this.wavesDone++;
     for (let i = 0; i < this.waveSize; i++) {
@@ -471,10 +487,17 @@ export class Game {
       let x = 0;
       let z = -4;
       if (!forced) {
-        for (let tries = 0; tries < 10; tries++) {
+        for (let tries = 0; tries < 12; tries++) {
           x = this.rng.range(-CONFIG.roomW / 2 + 3, CONFIG.roomW / 2 - 3);
           z = this.rng.range(-CONFIG.roomD / 2 + 3, CONFIG.roomD / 2 - 3);
-          if (Math.hypot(x - this.player.x, z - this.player.z) > 6) break;
+          if (Math.hypot(x - this.player.x, z - this.player.z) < 6) continue;
+          if (this.insideObstacle(x, z)) continue;
+          break;
+        }
+        // 12 次都失败则兜底挪到房间边缘
+        if (this.insideObstacle(x, z)) {
+          x = -CONFIG.roomW / 2 + 3;
+          z = 0;
         }
       }
       const delay = (kind === 'boss' ? 1.2 : 0.55) + i * 0.12;
@@ -1470,6 +1493,15 @@ export class Game {
   }
 
   // ---------- 掉落 / 出口 ----------
+
+  /** 出生点是否落在障碍物内(锅炉/活塞/板条箱) */
+  private insideObstacle(x: number, z: number): boolean {
+    if (!this.room) return false;
+    for (const o of this.room.obstacles) {
+      if (Math.hypot(x - o.x, z - o.z) < o.r + 0.8) return true;
+    }
+    return false;
+  }
 
   /** 迫击炮弹:抛射到落点后爆炸 */
   private fireMortarShell(sx: number, sz: number, tx: number, tz: number): void {
