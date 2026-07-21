@@ -10,7 +10,7 @@ import { makeGear } from '../three/factory/gears.ts';
 import { SteamVent } from '../three/factory/steam.ts';
 import { BulletPool, Bullet } from '../three/bulletPool.ts';
 import { generateFloor, Floor, RoomNode } from './rooms.ts';
-import { BALANCE } from './balance.ts';
+import { BALANCE, WeaponId, WEAPON_ORDER } from './balance.ts';
 import { t, lt } from '../core/i18n.ts';
 import { loadMeta } from '../core/meta.ts';
 import { PlayerStats, Upgrade, drawUpgrades } from './upgrades.ts';
@@ -109,6 +109,8 @@ export class Game {
   private pendingSpawns: { kind: EnemyKind; x: number; z: number; t: number; affix: Enemy['affix'] }[] = [];
   private wavesTotal = 0;
   private challengeTimer = -1;
+  private weapon: WeaponId = 'steamgun';
+  private qHeld = false;
   private wavesDone = 0;
   private waveSize = 0;
   private waveBreather = 0;
@@ -196,6 +198,7 @@ export class Game {
     this.newFloor();
     this.state = 'playing';
     this.overlay.setCrosshairVisible(true);
+    this.overlay.setWeapon(this.weapon);
   }
 
   private newFloor(): void {
@@ -696,6 +699,16 @@ export class Game {
     const p = this.player;
     const axis = this.input.moveAxis();
 
+    // Q 切换武器
+    if (this.input.pressed('KeyQ') && !this.qHeld) {
+      this.qHeld = true;
+      const idx = WEAPON_ORDER.indexOf(this.weapon);
+      this.weapon = WEAPON_ORDER[(idx + 1) % WEAPON_ORDER.length];
+      this.overlay.setWeapon(this.weapon);
+      synth.pickup();
+    }
+    if (!this.input.pressed('KeyQ')) this.qHeld = false;
+
     // 冲刺(空格):纯机动,快而短,冷却短,但【没有无敌帧】
     if (this.dashCd > 0) this.dashCd -= dt;
     if (
@@ -772,7 +785,7 @@ export class Game {
     // 开火
     p.fireCd -= dt;
     if (this.input.mouseDown && p.fireCd <= 0) {
-      p.fireCd = 1 / this.stats.fireRate;
+      p.fireCd = 1 / (this.stats.fireRate * BALANCE.weapons[this.weapon].rate);
       this.firePlayerBullets();
       synth.shoot();
       p.muzzleT = 0.05;
@@ -839,10 +852,12 @@ export class Game {
 
   private firePlayerBullets(): void {
     const p = this.player;
-    const total = 1 + this.stats.multiShot;
-    const spreadStep = 0.12;
+    const w = BALANCE.weapons[this.weapon];
+    const total = w.bullets + this.stats.multiShot;
+    // 散射武器按 spread 总角均分,单发武器多弹时给固定小步距
+    const spreadStep = w.bullets > 1 ? w.spread / Math.max(1, w.bullets - 1) : 0.12;
     for (let i = 0; i < total; i++) {
-      const offset = (i - (total - 1) / 2) * spreadStep;
+      const offset = (i - (total - 1) / 2) * spreadStep + (w.bullets > 1 ? (Math.random() - 0.5) * 0.06 : 0);
       const cos = Math.cos(offset);
       const sin = Math.sin(offset);
       const dx = p.aimX * cos - p.aimZ * sin;
@@ -853,13 +868,13 @@ export class Game {
       b.active = true;
       b.x = p.x + dx * 0.8;
       b.z = p.z + dz * 0.8;
-      b.vx = dx * this.stats.bulletSpeed;
-      b.vz = dz * this.stats.bulletSpeed;
-      b.dmg = this.stats.damage * (crit ? 2 : 1);
-      b.life = CONFIG.bulletLife;
-      b.pierce = this.stats.pierce;
+      b.vx = dx * this.stats.bulletSpeed * w.speed;
+      b.vz = dz * this.stats.bulletSpeed * w.speed;
+      b.dmg = this.stats.damage * w.dmg * (crit ? 2 : 1);
+      b.life = CONFIG.bulletLife * w.life;
+      b.pierce = this.stats.pierce + w.pierce;
       b.bounce = this.stats.bounce;
-      b.scale = this.stats.bulletScale * (crit ? 1.6 : 1);
+      b.scale = this.stats.bulletScale * w.scale * (crit ? 1.6 : 1);
       b.crit = crit;
     }
     // 枪口火花 + 准星回弹

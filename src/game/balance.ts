@@ -101,4 +101,14 @@ export const BALANCE = {
     time: 25, // 限时清版秒数
     cogs: 5, // 成功奖励齿轮币
   },
+
+  /** 武器参数:与玩家成长属性相乘 */
+  weapons: {
+    steamgun: { rate: 1, bullets: 1, spread: 0.12, speed: 1, life: 1, dmg: 1, pierce: 0, scale: 1 },
+    rivetgun: { rate: 0.32, bullets: 5, spread: 0.5, speed: 0.85, life: 0.32, dmg: 0.55, pierce: 0, scale: 0.9 },
+    railgun: { rate: 0.22, bullets: 1, spread: 0, speed: 1.6, life: 2, dmg: 2.5, pierce: 99, scale: 1.8 },
+  },
 } as const;
+
+export type WeaponId = keyof typeof BALANCE.weapons;
+export const WEAPON_ORDER: WeaponId[] = ['steamgun', 'rivetgun', 'railgun'];

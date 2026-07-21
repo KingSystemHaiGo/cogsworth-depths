@@ -94,6 +94,7 @@ export class Overlay {
   private hpText!: Text;
   private floorText!: Text;
   private cogText!: Text;
+  private weaponText!: Text;
   private bossBar = new Graphics();
   private bossText!: Text;
   private minimap = new Graphics();
@@ -156,6 +157,11 @@ export class Overlay {
       style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 16, fontWeight: 'bold', fill: 0xe8c877, letterSpacing: 1 }),
     });
     this.cogText.position.set(24, 176);
+    this.weaponText = new Text({
+      text: '',
+      style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 16, fontWeight: 'bold', fill: 0x9fc8d8, letterSpacing: 1 }),
+    });
+    this.weaponText.position.set(24, 198);
     this.bossText = new Text({
       text: '',
       style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 18, fontWeight: 'bold', fill: 0xffb0a0, letterSpacing: 3 }),
@@ -172,7 +178,7 @@ export class Overlay {
       }),
     });
     this.comboText.anchor.set(1, 0);
-    this.statusPanel.addChild(this.hpBar, this.hpText, this.floorText, this.cogText, this.cdBar);
+    this.statusPanel.addChild(this.hpBar, this.hpText, this.floorText, this.cogText, this.weaponText, this.cdBar);
     this.hudLayer.addChild(
       this.statusPanel,
       this.bossBar,
@@ -189,6 +195,12 @@ export class Overlay {
     this.app.stage.addChild(this.crosshair);
 
     this.upgradeScreen = new UpgradeScreen(this.app);
+  }
+
+  /** 当前武器指示 */
+  setWeapon(id: string): void {
+    const key = `weapon.${id}` as 'weapon.steamgun' | 'weapon.rivetgun' | 'weapon.railgun';
+    this.weaponText.text = `⚙ ${t(key)} ${t('weapon.hint')}`;
   }
 
   /** 升级三选一(Pixi 原生界面) */
@@ -536,7 +548,7 @@ export class Overlay {
     const w = 86;
     const h = 7;
     const x = 22;
-    const y = 198;
+    const y = 222;
     const draw = (yy: number, ratio: number, color: number, ready: boolean) => {
       g.roundRect(x, yy, w, h, 2).fill({ color: 0x10151b, alpha: 0.8 });
       g.roundRect(x, yy, w, h, 2).stroke({ color: 0x7a6540, width: 1 });
