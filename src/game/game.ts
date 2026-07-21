@@ -111,6 +111,7 @@ export class Game {
   private pets: Pet[] = [];
   private petTick = 0;
   private interactives: Interactive[] = [];
+  private mortarShells: { sx: number; sz: number; tx: number; tz: number; x: number; z: number; t: number; mesh: THREE.Mesh }[] = [];
   cogs = 0; // 齿轮币
   private exitPortal: THREE.Group | null = null;
   private dashT = 0;
@@ -210,6 +211,8 @@ export class Game {
     for (const it of this.interactives) this.stage.scene.remove(it.mesh);
     this.interactives = [];
     this.affordWarned.clear();
+    for (const s of this.mortarShells) this.stage.scene.remove(s.mesh);
+    this.mortarShells = [];
     this.clearBullets();
     if (this.exitPortal) {
       this.stage.scene.remove(this.exitPortal);
@@ -381,7 +384,10 @@ export class Game {
       const roll = this.rng.next();
       // 第 2 层起加入跳蚤和分裂球
       let kind: EnemyKind;
-      if (this.floorIndex >= 2) {
+      if (this.floorIndex >= 3) {
+        kind =
+          roll < 0.3 ? 'chaser' : roll < 0.48 ? 'shooter' : roll < 0.58 ? 'bomber' : roll < 0.72 ? 'dasher' : roll < 0.84 ? 'splitter' : roll < 0.92 ? 'warden' : 'mortar';
+      } else if (this.floorIndex >= 2) {
         kind =
           roll < 0.38 ? 'chaser' : roll < 0.6 ? 'shooter' : roll < 0.72 ? 'bomber' : roll < 0.86 ? 'dasher' : 'splitter';
       } else {
@@ -432,11 +438,18 @@ export class Game {
     this.timeSec += dt;
     if (this.room) this.room.update(dt, time);
 
-    this.updatePlayer(dt);
-    this.updateEnemies(dt, time);
-    this.updateBullets(dt, this.playerBullets, true);
-    this.updateBullets(dt, this.enemyBullets, false);
-    this.updateDrops(dt, time);
+    // 子步进模拟:低帧率下把 dt 切成 ≤1/90s 的小步,
+    // 子弹不会一帧飞跃敌人(穿透),射击手感在任何帧率下一致
+    const steps = Math.max(1, Math.min(6, Math.ceil(dt / (1 / 90))));
+    const sdt = dt / steps;
+    for (let s = 0; s < steps; s++) {
+      this.updatePlayer(sdt);
+      this.updateEnemies(sdt, time);
+      this.updateBullets(sdt, this.playerBullets, true);
+      this.updateBullets(sdt, this.enemyBullets, false);
+      this.updateDrops(sdt, time);
+      this.updateShells(sdt);
+    }
     this.checkDoors();
     this.updateCameraTarget();
 
@@ -471,8 +484,8 @@ export class Game {
     }
     this.overlay.setEnemyHp(this.enemyHpList);
     this.overlay.setCooldowns(
-      1 - Math.max(0, this.dashCd) / 1.25,
-      1 - Math.max(0, this.rollCd) / 0.9,
+      1 - Math.max(0, this.dashCd) / BALANCE.player.dashCd,
+      1 - Math.max(0, this.rollCd) / BALANCE.player.rollCd,
     );
 
     // 房间清除判定
@@ -493,25 +506,24 @@ export class Game {
     const p = this.player;
     const axis = this.input.moveAxis();
 
-    // 冲刺(空格):短爆发位移 + 无敌帧
+    // 冲刺(空格):纯机动,快而短,冷却短,但【没有无敌帧】
     if (this.dashCd > 0) this.dashCd -= dt;
     if (
       this.dashCd <= 0 &&
       this.input.pressed('Space') &&
       (axis.x !== 0 || axis.y !== 0)
     ) {
-      this.dashT = 0.16;
-      this.dashCd = 1.25;
+      this.dashT = 0.14;
+      this.dashCd = BALANCE.player.dashCd;
       this.dashX = axis.x;
       this.dashZ = axis.y;
-      p.invuln = Math.max(p.invuln, 0.32);
       synth.dash();
       const tmp = { x: 0, y: 0 };
       this.worldToScreen(p.x, p.z, tmp);
       this.overlay.sparkBurst(tmp.x, tmp.y, 0x9fb4c0, 8);
     }
 
-    // 翻滚(Shift):较长位移,全身翻转动画,全程无敌
+    // 翻滚(Shift):较慢较长,全身翻转,全程无敌,冷却更长——纯防御技
     if (this.rollCd > 0) this.rollCd -= dt;
     if (
       this.rollCd <= 0 &&
@@ -519,11 +531,11 @@ export class Game {
       (axis.x !== 0 || axis.y !== 0)
     ) {
       this.rollT = 0.42;
-      this.rollCd = 0.9;
+      this.rollCd = BALANCE.player.rollCd;
       this.rollX = axis.x;
       this.rollZ = axis.y;
       p.invuln = Math.max(p.invuln, 0.45);
-      synth.dash();
+      synth.roll();
     }
 
     const body = p.mesh!.userData.body as THREE.Group;
@@ -543,8 +555,8 @@ export class Game {
       }
     } else if (this.dashT > 0) {
       this.dashT -= dt;
-      p.x += this.dashX * this.stats.speed * 3.4 * dt;
-      p.z += this.dashZ * this.stats.speed * 3.4 * dt;
+      p.x += this.dashX * this.stats.speed * 4.0 * dt;
+      p.z += this.dashZ * this.stats.speed * 4.0 * dt;
       // 冲刺蒸汽残影
       if (Math.random() < 0.6) {
         const tmp = { x: 0, y: 0 };
@@ -756,6 +768,31 @@ export class Game {
           e.mesh.rotation.y += dt * 0.6;
           break;
         }
+        case 'warden': {
+          // 盾卫:缓慢推进,转身速度受限(正面护盾几乎无敌,逼迫绕后)
+          e.x += nx * e.speed * dt;
+          e.z += nz * e.speed * dt;
+          const targetRot = Math.atan2(nx, nz);
+          let diff = targetRot - e.mesh.rotation.y;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          const turn = 1.1 * dt; // 每秒最多转 ~63°
+          e.mesh.rotation.y += THREE.MathUtils.clamp(diff, -turn, turn);
+          break;
+        }
+        case 'mortar': {
+          // 迫击手:保持距离,定期抛射爆破弹
+          const want = dist < 8 ? -1 : dist > 12 ? 1 : 0;
+          e.x += nx * e.speed * want * dt + -nz * e.speed * 0.4 * dt;
+          e.z += nz * e.speed * want * dt + nx * e.speed * 0.4 * dt;
+          e.mesh.rotation.y = Math.atan2(nx, nz);
+          e.fireCd -= dt;
+          if (e.fireCd <= 0 && dist < 15) {
+            e.fireCd = BALANCE.mortar.fireCd;
+            this.fireMortarShell(e.x, e.z, p.x, p.z);
+          }
+          break;
+        }
         case 'boss': {
           this.updateBoss(e, dt, dist, nx, nz, time);
           break;
@@ -933,6 +970,21 @@ export class Game {
         for (let i = this.enemies.length - 1; i >= 0; i--) {
           const e = this.enemies[i];
           if (Math.hypot(b.x - e.x, b.z - e.z) < e.r + b.r) {
+            // 盾卫正面护盾:挡住来自正面 ~65° 弧的子弹
+            if (e.kind === 'warden') {
+              const fx = Math.sin(e.mesh.rotation.y);
+              const fz = Math.cos(e.mesh.rotation.y);
+              const bv = Math.hypot(b.vx, b.vz) || 1;
+              const dot = (b.vx / bv) * fx + (b.vz / bv) * fz;
+              if (dot < -0.42) {
+                const tmp = { x: 0, y: 0 };
+                this.worldToScreen(b.x, b.z, tmp);
+                this.overlay.sparkBurst(tmp.x, tmp.y, 0xe8c877, 6);
+                synth.hit();
+                dead = true;
+                break;
+              }
+            }
             this.damageEnemy(i, b.dmg, b.mesh.userData.crit === true, b.vx, b.vz);
             if (b.pierce > 0) {
               b.pierce--;
@@ -1086,6 +1138,37 @@ export class Game {
   }
 
   // ---------- 掉落 / 出口 ----------
+
+  /** 迫击炮弹:抛射到落点后爆炸 */
+  private fireMortarShell(sx: number, sz: number, tx: number, tz: number): void {
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.22, 8, 6),
+      new THREE.MeshToonMaterial({ color: 0xff5544, emissive: 0xff5544, emissiveIntensity: 2.2 }),
+    );
+    this.stage.scene.add(mesh);
+    this.mortarShells.push({ sx, sz, tx, tz, x: sx, z: sz, t: 0, mesh });
+    // 落点预警圈(持续到落地)
+    const tmp = { x: 0, y: 0 };
+    this.worldToScreen(tx, tz, tmp);
+    this.overlay.ring(tmp.x, tmp.y, 0xff5544, 55, BALANCE.mortar.shellDur);
+    synth.shoot();
+  }
+
+  private updateShells(dt: number): void {
+    for (let i = this.mortarShells.length - 1; i >= 0; i--) {
+      const s = this.mortarShells[i];
+      s.t += dt;
+      const prog = Math.min(1, s.t / BALANCE.mortar.shellDur);
+      s.x = s.sx + (s.tx - s.sx) * prog;
+      s.z = s.sz + (s.tz - s.sz) * prog;
+      s.mesh.position.set(s.x, 0.5 + Math.sin(prog * Math.PI) * BALANCE.mortar.arcHeight, s.z);
+      if (prog >= 1) {
+        this.explode(s.x, s.z, BALANCE.mortar.radius, BALANCE.enemies.mortar.dmg);
+        this.stage.scene.remove(s.mesh);
+        this.mortarShells.splice(i, 1);
+      }
+    }
+  }
 
   /** 齿轮宠物:环绕玩家,接触伤敌 + 挡敌弹 */
   private updatePets(dt: number, time: number): void {
@@ -1268,13 +1351,20 @@ export class Game {
     this.offerUpgrade();
   }
 
-  /** 弹出三选一升级(清房奖励/宝箱共用) */
+  /** 弹出三选一升级(清房奖励/宝箱共用),支持 1/2/3 键快选 */
   private offerUpgrade(): void {
     this.state = 'upgrading';
     this.overlay.setCrosshairVisible(false);
     this.input.exitLock(); // 释放鼠标以便点击卡片
     const options = drawUpgrades(3, (arr) => this.rng.pick(arr), this.upgradeCounts);
-    this.overlay.showUpgrade(options, (u: Upgrade) => {
+    const keyHandler = (e: KeyboardEvent) => {
+      const idx = ['Digit1', 'Digit2', 'Digit3'].indexOf(e.code);
+      if (idx >= 0 && options[idx]) {
+        pick(options[idx]);
+      }
+    };
+    const pick = (u: Upgrade): void => {
+      window.removeEventListener('keydown', keyHandler);
       u.apply(this.stats, (n) => this.heal(n));
       this.upgradeCounts.set(u.id, (this.upgradeCounts.get(u.id) ?? 0) + 1);
       synth.pickup();
@@ -1283,7 +1373,9 @@ export class Game {
       this.state = 'playing';
       this.overlay.setCrosshairVisible(true);
       this.input.requestLock();
-    }, this.upgradeCounts);
+    };
+    window.addEventListener('keydown', keyHandler);
+    this.overlay.showUpgrade(options, pick, this.upgradeCounts);
   }
 
   private checkDoors(): void {

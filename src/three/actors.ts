@@ -94,7 +94,7 @@ export function makePlayerMesh(): THREE.Group {
   return root;
 }
 
-export type EnemyKind = 'chaser' | 'shooter' | 'bomber' | 'dasher' | 'splitter' | 'mini' | 'boss';
+export type EnemyKind = 'chaser' | 'shooter' | 'bomber' | 'dasher' | 'splitter' | 'mini' | 'warden' | 'mortar' | 'boss';
 
 export function makeEnemyMesh(kind: EnemyKind): THREE.Group {
   const g = buildEnemyMesh(kind);
@@ -106,6 +106,8 @@ export function makeEnemyMesh(kind: EnemyKind): THREE.Group {
     dasher: 0.6,
     splitter: 0.85,
     mini: 0.35,
+    warden: 0.9,
+    mortar: 0.7,
     boss: 1.9,
   };
   g.add(makeBlobShadow(shadowR[kind]));
@@ -238,6 +240,71 @@ function buildEnemyMesh(kind: EnemyKind): THREE.Group {
       dial.position.set(0, 0.55, 0.47);
       g.add(dial);
       g.userData.core = core;
+      return g;
+    }
+    case 'warden': {
+      // 盾卫:重甲桶身 + 正面黄铜大盾,转身缓慢逼迫绕后
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.58, 1.0, 10), ironDarkMat);
+      body.position.y = 0.5;
+      g.add(body);
+      const helm = new THREE.Mesh(
+        new THREE.SphereGeometry(0.34, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+        ironMat,
+      );
+      helm.position.y = 1.0;
+      g.add(helm);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), emberMat);
+      eye.position.set(0, 1.02, 0.3);
+      g.add(eye);
+      // 正面大盾(+Z 朝向)
+      const shield = new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.25, 0.12), brassMat);
+      shield.position.set(0, 0.65, 0.6);
+      g.add(shield);
+      const shieldRim = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.05, 6, 14), copperMat);
+      shieldRim.position.set(0, 0.7, 0.67);
+      g.add(shieldRim);
+      for (const [rx, ry] of [
+        [-0.45, 1.1],
+        [0.45, 1.1],
+        [-0.45, 0.2],
+        [0.45, 0.2],
+      ]) {
+        const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 5), copperMat);
+        rivet.position.set(rx, ry, 0.67);
+        g.add(rivet);
+      }
+      return g;
+    }
+    case 'mortar': {
+      // 迫击手:矮铜壶 + 斜置炮管,抛射爆破弹
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.52, 12, 10), copperMat);
+      body.position.y = 0.48;
+      g.add(body);
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.05, 6, 16), brassMat);
+      band.rotation.x = Math.PI / 2;
+      band.position.y = 0.5;
+      g.add(band);
+      // 斜置炮管
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.8, 8), ironDarkMat);
+      barrel.position.set(0, 0.95, 0.15);
+      barrel.rotation.x = -Math.PI / 4;
+      g.add(barrel);
+      const muzzleRing = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.04, 6, 12), brassMat);
+      muzzleRing.position.set(0, 1.25, 0.45);
+      muzzleRing.rotation.x = -Math.PI / 4;
+      g.add(muzzleRing);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), emberMat);
+      eye.position.set(0, 0.55, 0.48);
+      g.add(eye);
+      // 三条矮腿
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2;
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.35, 6), ironDarkMat);
+        leg.position.set(Math.cos(a) * 0.4, 0.18, Math.sin(a) * 0.4);
+        g.add(leg);
+      }
       return g;
     }
     case 'boss': {

@@ -60,6 +60,13 @@ const brassMat = toonMat(PALETTE.brass);
 const copperMat = toonMat(PALETTE.copper);
 const emberMat = glowMat(PALETTE.ember, 2.2);
 
+/** 房间主题:铁灰(默认)/ 铁锈 / 铜绿 — 地板墙面换色,氛围立刻不同 */
+const ROOM_THEMES = [
+  { floor: 0xffffff, wall: 0x2b323b }, // 铁灰
+  { floor: 0xd8b09a, wall: 0x38251c }, // 铁锈
+  { floor: 0xa8ccc2, wall: 0x1e302c }, // 铜绿
+] as const;
+
 export interface Door {
   side: DoorSide;
   group: THREE.Group;
@@ -96,6 +103,10 @@ export class Room {
     const { w, d } = this;
     const wallH = CONFIG.wallH;
     const doorGap = 4;
+    // 每房间随机主题
+    const theme = rng.pick(ROOM_THEMES);
+    const themedWall = wallMat.clone();
+    (themedWall.color as THREE.Color).set(theme.wall);
 
     // 地板
     const floor = new THREE.Mesh(
@@ -103,12 +114,13 @@ export class Room {
       new THREE.MeshToonMaterial({ map: floorTex.clone(), gradientMap: toonGradient }),
     );
     (floor.material as THREE.MeshToonMaterial).map!.repeat.set(w / 8, d / 8);
+    (floor.material as THREE.MeshToonMaterial).color.set(theme.floor);
     floor.rotation.x = -Math.PI / 2;
     this.group.add(floor);
 
     // 四面墙(有门的一侧留缺口)
     const mkWall = (ww: number, x: number, z: number, rotY: number) => {
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(ww, wallH, 0.6), wallMat);
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(ww, wallH, 0.6), themedWall);
       wall.position.set(x, wallH / 2, z);
       wall.rotation.y = rotY;
       this.group.add(wall);

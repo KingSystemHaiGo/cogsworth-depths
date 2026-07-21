@@ -41,7 +41,7 @@ const TEXTS = {
   'over.sec': { zh: '秒', en: 's' },
 
   'upgrade.title': { zh: '房 间 清 除', en: 'ROOM CLEARED' },
-  'upgrade.subtitle': { zh: '— 选 择 一 项 改 装 —', en: '— CHOOSE AN UPGRADE —' },
+  'upgrade.subtitle': { zh: '— 选 择 一 项 改 装 (1/2/3) —', en: '— CHOOSE AN UPGRADE (1/2/3) —' },
 
   'settings.title': { zh: '设 置', en: 'SETTINGS' },
   'settings.lang': { zh: '语言 / Language', en: 'Language / 语言' },

@@ -183,6 +183,28 @@ class Synth {
     n.stop(t + 0.26);
   }
 
+  /** 翻滚:低沉金属滚动声(和冲刺的清亮嘶鸣拉开) */
+  roll(): void {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    // 低频滚动隆隆
+    const n = this.noise(0.35);
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(700, t);
+    f.frequency.exponentialRampToValueAtTime(180, t + 0.3);
+    n.connect(f);
+    this.env(f, t, 0.35, 0.34);
+    n.start(t);
+    n.stop(t + 0.36);
+    // 落地金属闷响
+    const o = this.osc('triangle', 140);
+    o.frequency.exponentialRampToValueAtTime(70, t + 0.15);
+    this.env(o, t + 0.22, 0.3, 0.14);
+    o.start(t + 0.22);
+    o.stop(t + 0.38);
+  }
+
   /** 拾取:上行琶音 */
   pickup(): void {
     if (!this.ctx) return;

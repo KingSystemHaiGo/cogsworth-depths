@@ -155,7 +155,8 @@ export class ThreeStage {
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // 像素比上限 1.5:全屏后处理链的成本随分辨率平方增长,1.5 是画质/性能的平衡点
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = false;
 

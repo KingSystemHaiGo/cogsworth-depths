@@ -9,8 +9,8 @@ export const BALANCE = {
     damage: 12,
     bulletSpeed: 22,
     bulletLife: 1.4,
-    dashCd: 1.25,
-    rollCd: 0.9,
+    dashCd: 0.9,
+    rollCd: 1.2,
     invulnAfterHit: 0.7,
   },
 
@@ -22,6 +22,8 @@ export const BALANCE = {
     dasher: { hp: 35, speed: 2.8, r: 0.55, dmg: 16 },
     splitter: { hp: 60, speed: 2.6, r: 0.8, dmg: 14 },
     mini: { hp: 12, speed: 5.2, r: 0.3, dmg: 8 },
+    warden: { hp: 90, speed: 1.5, r: 0.75, dmg: 18 },
+    mortar: { hp: 45, speed: 2.0, r: 0.6, dmg: 16 },
     boss: { hp: 950, speed: 1.8, r: 1.6, dmg: 20 },
   },
 
@@ -74,6 +76,13 @@ export const BALANCE = {
     dmgBase: 10,
     dmgRatio: 0.3, // 占玩家攻击力比例
     blockRadius: 0.55,
+  },
+
+  mortar: {
+    shellDur: 1.1, // 炮弹飞行时间
+    radius: 2.2, // 落点爆炸半径
+    fireCd: 3.2,
+    arcHeight: 3.5,
   },
 
   shield: {

@@ -111,6 +111,7 @@ export class Overlay {
       resizeTo: window,
       backgroundAlpha: 0,
       antialias: true,
+      resolution: Math.min(window.devicePixelRatio, 1.5),
     });
     this.app.stage.addChild(this.fxLayer);
     this.app.stage.addChild(this.hudLayer);
@@ -269,12 +270,12 @@ export class Overlay {
     }
   }
 
-  /** 冲击波环:击杀/爆炸的爆发力来源 */
-  ring(sx: number, sy: number, color: number, maxR = 90): void {
+  /** 冲击波环:击杀/爆炸的爆发力来源;life 可调(迫击预警圈用) */
+  ring(sx: number, sy: number, color: number, maxR = 90, life = 0.35): void {
     const gfx = new Graphics();
     gfx.blendMode = 'add';
     this.fxLayer.addChild(gfx);
-    this.rings.push({ gfx, x: sx, y: sy, r: 6, vr: maxR * 4.5, life: 0.35, maxLife: 0.35, color });
+    this.rings.push({ gfx, x: sx, y: sy, r: 6, vr: maxR * (1.6 / life), life, maxLife: life, color });
   }
 
   /** 敌人头顶血条(只画受伤的) */
