@@ -13,6 +13,7 @@ import { generateFloor, Floor, RoomNode } from './rooms.ts';
 import { BALANCE, WeaponId, WEAPON_ORDER } from './balance.ts';
 import { t, lt } from '../core/i18n.ts';
 import { loadMeta } from '../core/meta.ts';
+import { loadCodex, saveCodex, CodexState } from '../core/codex.ts';
 import { PlayerStats, Upgrade, drawUpgrades } from './upgrades.ts';
 import { Overlay } from '../pixi/overlay.ts';
 import { synth } from '../audio/synth.ts';
@@ -79,6 +80,7 @@ export class Game {
   bossKills = 0;
   timeSec = 0;
   private reviveUsed = false;
+  private codex: CodexState = loadCodex();
 
   private rng = new RNG('init');
   private floor: Floor | null = null;
@@ -1552,6 +1554,9 @@ export class Game {
     if (byPlayer) {
       this.kills++;
       if (this.isBoss(e.kind)) this.bossKills++;
+      // 图鉴收录
+      this.codex.kills[e.kind] = (this.codex.kills[e.kind] ?? 0) + 1;
+      saveCodex(this.codex);
       // 连击:3 秒窗口内连续击杀
       this.comboCount++;
       this.comboTimer = BALANCE.combo.window;
@@ -1924,6 +1929,10 @@ export class Game {
       window.removeEventListener('keydown', keyHandler);
       u.apply(this.stats, (n) => this.heal(n));
       this.upgradeCounts.set(u.id, (this.upgradeCounts.get(u.id) ?? 0) + 1);
+      if (!this.codex.upgrades.includes(u.id)) {
+        this.codex.upgrades.push(u.id);
+        saveCodex(this.codex);
+      }
       synth.pickup();
       this.room!.setAllDoors(true);
       synth.doorOpen();

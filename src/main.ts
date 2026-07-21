@@ -13,8 +13,9 @@ import { Overlay } from './pixi/overlay.ts';
 import { Game } from './game/game.ts';
 import { synth } from './audio/synth.ts';
 import { music } from './audio/music.ts';
-import { showTitle, showPause, showGameOver, showSettings, showWorkshop, SettingsValues } from './ui/screens.ts';
+import { showTitle, showPause, showGameOver, showSettings, showWorkshop, showCodex, SettingsValues } from './ui/screens.ts';
 import { loadMeta, saveMeta, awardScrap, META_UPGRADES } from './core/meta.ts';
+import { loadCodex } from './core/codex.ts';
 
 const VOL_KEY = 'cogsworth-volumes';
 
@@ -168,6 +169,7 @@ async function main(): Promise<void> {
       startGame,
       () => openSettings(showTitleScreen),
       () => openWorkshop(),
+      () => showCodex(loadCodex(), showTitleScreen),
       () => startGame(`DAILY-${dailyKey()}`),
       meta.scrap,
       dailyBest(),

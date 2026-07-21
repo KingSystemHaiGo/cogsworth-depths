@@ -1,6 +1,8 @@
 // DOM 界面层:标题 / 暂停 / 设置 / 结算(全部双语)
 import { t, getLang, setLang, Lang, lt } from '../core/i18n.ts';
 import { MetaState, META_UPGRADES } from '../core/meta.ts';
+import { CodexState, ENEMY_LORE } from '../core/codex.ts';
+import { UPGRADES } from '../game/upgrades.ts';
 
 const layer = () => document.getElementById('ui-layer')!;
 
@@ -15,6 +17,7 @@ export function showTitle(
   onStart: (seed: string) => void,
   onSettings: () => void,
   onWorkshop: () => void,
+  onCodex: () => void,
   onDaily: () => void,
   scrapCount: number,
   dailyBest: number | null,
@@ -31,6 +34,7 @@ export function showTitle(
       <button class="btn" id="daily-btn">${t('game.daily')}</button>
       <div class="seed-row">${dailyBest !== null ? t('daily.best', { n: dailyBest }) : ''}</div>
       <button class="btn btn-sub" id="workshop-btn">${t('game.workshop')} ⚙${scrapCount}</button>
+      <button class="btn btn-sub" id="codex-btn">${t('game.codex')}</button>
       <button class="btn btn-sub" id="settings-btn">${t('game.settings')}</button>
     </div>
   `);
@@ -48,12 +52,51 @@ export function showTitle(
     screen.remove();
     onWorkshop();
   });
+  screen.querySelector('#codex-btn')!.addEventListener('click', () => {
+    screen.remove();
+    onCodex();
+  });
   screen.querySelector('#settings-btn')!.addEventListener('click', () => {
     screen.remove();
     onSettings();
   });
 }
 
+/** 图鉴:蒸汽手账收集册 */
+export function showCodex(codex: CodexState, onBack: () => void): void {
+  const totalKills = Object.values(codex.kills).reduce((a, b) => a + b, 0);
+  const enemyCards = Object.entries(ENEMY_LORE)
+    .map(([id, lore]) => {
+      const kills = codex.kills[id] ?? 0;
+      const locked = kills === 0;
+      return `
+      <div class="codex-card ${locked ? 'locked' : ''}">
+        <div class="name">${locked ? '???' : lt(lore.name)}</div>
+        <div class="desc">${locked ? t('codex.locked') : lt(lore.desc)}</div>
+        <div class="kills">${locked ? '' : `${t('codex.kills')}${kills}`}</div>
+      </div>`;
+    })
+    .join('');
+  const upCount = codex.upgrades.length;
+  const upNames = UPGRADES.filter((u) => codex.upgrades.includes(u.id))
+    .map((u) => lt(u.name))
+    .join(' · ');
+  const screen = el(`
+    <div class="screen codex-screen">
+      <h1>${t('codex.title')}</h1>
+      <h2>${t('codex.subtitle', { k: totalKills, u: upCount, t: UPGRADES.length })}</h2>
+      <div class="codex-grid">${enemyCards}</div>
+      <h2 style="margin-top:14px">${t('codex.upgrades')}</h2>
+      <p class="stats-line" style="max-width:60vw">${upNames || t('codex.none')}</p>
+      <button class="btn" id="back-btn">${t('game.back')}</button>
+    </div>
+  `);
+  layer().appendChild(screen);
+  screen.querySelector('#back-btn')!.addEventListener('click', () => {
+    screen.remove();
+    onBack();
+  });
+}
 /** 改装间:用齿轮残片购买永久升级(局外成长) */
 export function showWorkshop(
   meta: MetaState,
