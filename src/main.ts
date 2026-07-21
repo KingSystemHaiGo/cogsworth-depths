@@ -105,6 +105,12 @@ async function main(): Promise<void> {
     // 局外成长:结算齿轮残片
     meta.scrap += awardScrap(game.kills, game.floorIndex, game.bossKills);
     saveMeta(meta);
+    // 每日挑战最佳
+    if (game.seed.startsWith('DAILY-')) {
+      const key = `cogsworth-daily-${dailyKey()}`;
+      const prev = Number(localStorage.getItem(key) ?? 0);
+      if (game.floorIndex > prev) localStorage.setItem(key, String(game.floorIndex));
+    }
     showGameOver(
       { floor: game.floorIndex, kills: game.kills, timeSec: game.timeSec, seed: game.seed },
       restart,
@@ -134,24 +140,37 @@ async function main(): Promise<void> {
     music.start();
   }
 
+  // 每日挑战:日期种子 + 今日最佳记录
+  function dailyKey(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  function dailyBest(): number | null {
+    const v = localStorage.getItem(`cogsworth-daily-${dailyKey()}`);
+    return v ? Number(v) : null;
+  }
+  function startGame(seed: string): void {
+    synth.init();
+    const ctx = synth.audioContext;
+    const bus = synth.inputBus;
+    if (ctx && bus) music.init(ctx, bus);
+    applyVolumes(volumes);
+    synth.startAmbient();
+    game.start(seed);
+    input.requestLock();
+    music.start();
+  }
+
   // 标题界面(可重入:设置/改装间返回后再次显示)
   function showTitleScreen(): void {
     showTitle(
       randomSeed(),
-      (seed) => {
-        synth.init();
-        const ctx = synth.audioContext;
-        const bus = synth.inputBus;
-        if (ctx && bus) music.init(ctx, bus);
-        applyVolumes(volumes); // 音频上下文就绪后应用一次
-        synth.startAmbient();
-        game.start(seed);
-        input.requestLock();
-        music.start();
-      },
+      startGame,
       () => openSettings(showTitleScreen),
       () => openWorkshop(),
+      () => startGame(`DAILY-${dailyKey()}`),
       meta.scrap,
+      dailyBest(),
     );
   }
   showTitleScreen();

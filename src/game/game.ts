@@ -120,6 +120,7 @@ export class Game {
   private drops: Drop[] = [];
   private pets: Pet[] = [];
   private petTick = 0;
+  private petShootCd = 0;
   private interactives: Interactive[] = [];
   private mortarShells: { sx: number; sz: number; tx: number; tz: number; x: number; z: number; t: number; mesh: THREE.Mesh }[] = [];
   /** 蒸汽喷射机关:周期性喷发的地面喷口 */
@@ -167,6 +168,8 @@ export class Game {
       pet: 0,
       boom: 0,
       scavenger: 0,
+      boomBounce: 0,
+      petShoot: 0,
     };
   }
 
@@ -1398,6 +1401,11 @@ export class Game {
           this.worldToScreen(b.x, b.z, tmp);
           this.overlay.sparkBurst(tmp.x, tmp.y, 0xffd980, 4);
           synth.hit();
+          // 协同:弹跳爆弹——弹射点也爆炸
+          if (this.stats.boomBounce > 0) {
+            this.splash(b.x, b.z, 1.3, this.stats.damage * 0.4);
+            this.overlay.ring(tmp.x, tmp.y, 0xffb347, 50);
+          }
         }
       }
 
@@ -1486,6 +1494,22 @@ export class Game {
     b.life = 3.5;
   }
 
+  /** 范围波及伤害(爆裂弹头/弹跳爆弹共用) */
+  private splash(x: number, z: number, radius: number, dmg: number, exclude = -1): void {
+    for (let i2 = this.enemies.length - 1; i2 >= 0; i2--) {
+      if (i2 === exclude) continue;
+      const o = this.enemies[i2];
+      if (Math.hypot(o.x - x, o.z - z) < radius + o.r) {
+        o.hp -= dmg;
+        this.overlay.damageNumber(o.x, o.z, dmg, false);
+        if (o.hp <= 0) this.killEnemy(i2, true);
+      }
+    }
+    const tmp = { x: 0, y: 0 };
+    this.worldToScreen(x, z, tmp);
+    this.overlay.ring(tmp.x, tmp.y, 0xffb347, radius * 40);
+  }
+
   private damageEnemy(idx: number, dmg: number, crit: boolean, dirX = 0, dirZ = 0): void {
     const e = this.enemies[idx];
     e.hp -= dmg * e.dmgTaken;
@@ -1499,20 +1523,7 @@ export class Game {
     e.hitPop = 1; // 受击挤压
     // 爆裂弹头:命中点范围波及
     if (this.stats.boom > 0) {
-      const radius = 1.1 + this.stats.boom * 0.5;
-      const splash = this.stats.damage * 0.3 * this.stats.boom;
-      for (let i2 = this.enemies.length - 1; i2 >= 0; i2--) {
-        if (i2 === idx) continue;
-        const o = this.enemies[i2];
-        if (Math.hypot(o.x - e.x, o.z - e.z) < radius + o.r) {
-          o.hp -= splash;
-          this.overlay.damageNumber(o.x, o.z, splash, false);
-          if (o.hp <= 0) this.killEnemy(i2, true);
-        }
-      }
-      const tmp2 = { x: 0, y: 0 };
-      this.worldToScreen(e.x, e.z, tmp2);
-      this.overlay.ring(tmp2.x, tmp2.y, 0xffb347, radius * 40);
+      this.splash(e.x, e.z, 1.1 + this.stats.boom * 0.5, this.stats.damage * 0.3 * this.stats.boom, idx);
     }
     this.overlay.damageNumber(e.x, e.z, dmg, crit);
     const tmp = { x: 0, y: 0 };
@@ -1692,6 +1703,43 @@ export class Game {
     this.petTick -= dt;
     const doTick = this.petTick <= 0;
     if (doTick) this.petTick = BALANCE.pet.tickInterval;
+    // 协同:武装齿轮——宠物自动射击最近的敌人
+    this.petShootCd -= dt;
+    if (this.stats.petShoot > 0 && this.petShootCd <= 0) {
+      this.petShootCd = 1.2;
+      let target: Enemy | null = null;
+      let best = 11;
+      for (const e of this.enemies) {
+        const d = Math.hypot(e.x - this.player.x, e.z - this.player.z);
+        if (d < best) {
+          best = d;
+          target = e;
+        }
+      }
+      if (target) {
+        const pet = this.pets[0];
+        const px = pet.mesh.position.x;
+        const pz = pet.mesh.position.z;
+        const dx = target.x - px;
+        const dz = target.z - pz;
+        const dl = Math.hypot(dx, dz) || 1;
+        const b = this.playerBullets.findFree();
+        if (b) {
+          b.active = true;
+          b.x = px;
+          b.z = pz;
+          b.vx = (dx / dl) * 20;
+          b.vz = (dz / dl) * 20;
+          b.dmg = this.stats.damage * 0.5;
+          b.life = 0.9;
+          b.pierce = 0;
+          b.bounce = 0;
+          b.scale = 0.8;
+          b.crit = false;
+        }
+        synth.hit();
+      }
+    }
 
     this.pets.forEach((pet, i) => {
       pet.angle += dt * BALANCE.pet.orbitSpeed;

@@ -16,6 +16,8 @@ export interface PlayerStats {
   pet: number; // 齿轮宠物数量
   boom: number; // 爆裂弹头等级(子弹命中爆炸)
   scavenger: number; // 拾荒协议(磁吸范围+齿轮币加成)
+  boomBounce: number; // 协同:弹跳爆弹(弹射时也爆炸)
+  petShoot: number; // 协同:武装齿轮(宠物开火)
 }
 
 export interface Upgrade {
@@ -25,6 +27,8 @@ export interface Upgrade {
   desc: LText;
   /** 堆叠上限,Infinity = 不限 */
   maxStacks: number;
+  /** 协同前置:拥有这些升级后才会出现在卡池 */
+  requires?: { id: string; lv: number }[];
   apply: (s: PlayerStats, heal: (n: number) => void) => void;
 }
 
@@ -139,15 +143,45 @@ export const UPGRADES: Upgrade[] = [
     desc: { zh: '拾取磁吸范围 +50%,齿轮币掉率提升', en: 'Pickup magnet range +50%, more cog drops' },
     apply: (s) => (s.scavenger += 1),
   },
+  // ---- 协同词条:满足前置才出现 ----
+  {
+    id: 'boombounce',
+    maxStacks: 1,
+    icon: '⁂',
+    name: { zh: '弹跳爆弹', en: 'Bouncing Boom' },
+    desc: { zh: '协同:子弹弹射墙壁时也会爆炸', en: 'Combo: bullets also explode when bouncing' },
+    requires: [
+      { id: 'bounce', lv: 1 },
+      { id: 'boom', lv: 1 },
+    ],
+    apply: (s) => (s.boomBounce += 1),
+  },
+  {
+    id: 'petshoot',
+    maxStacks: 1,
+    icon: '✵',
+    name: { zh: '武装齿轮', en: 'Armed Gears' },
+    desc: { zh: '协同:齿轮宠物自动射击最近的敌人', en: 'Combo: gear familiars shoot the nearest enemy' },
+    requires: [{ id: 'pet', lv: 1 }],
+    apply: (s) => (s.petShoot += 1),
+  },
 ];
 
-/** 从池中抽 n 个不重复升级;已达堆叠上限的升级不再出现 */
+/** 从池中抽 n 个不重复升级;已达堆叠上限的升级不再出现,协同词条需满足前置 */
 export function drawUpgrades(
   n: number,
   rngPick: <T>(arr: readonly T[]) => T,
   owned?: ReadonlyMap<string, number>,
 ): Upgrade[] {
-  const pool = UPGRADES.filter((u) => (owned?.get(u.id) ?? 0) < u.maxStacks);
+  const pool = UPGRADES.filter((u) => {
+    if ((owned?.get(u.id) ?? 0) >= u.maxStacks) return false;
+    if (u.requires) {
+      for (const req of u.requires) {
+        if ((owned?.get(req.id) ?? 0) < req.lv) return false;
+      }
+    }
+    return true;
+  });
   const out: Upgrade[] = [];
   while (out.length < n && pool.length > 0) {
     const pick = rngPick(pool);

@@ -15,7 +15,9 @@ export function showTitle(
   onStart: (seed: string) => void,
   onSettings: () => void,
   onWorkshop: () => void,
+  onDaily: () => void,
   scrapCount: number,
+  dailyBest: number | null,
 ): void {
   const screen = el(`
     <div class="screen">
@@ -26,6 +28,8 @@ export function showTitle(
         ${t('game.seed')} <input id="seed-input" type="text" value="${defaultSeed}" maxlength="12"/>
       </div>
       <button class="btn" id="start-btn">${t('game.start')}</button>
+      <button class="btn" id="daily-btn">${t('game.daily')}</button>
+      <div class="seed-row">${dailyBest !== null ? t('daily.best', { n: dailyBest }) : ''}</div>
       <button class="btn btn-sub" id="workshop-btn">${t('game.workshop')} ⚙${scrapCount}</button>
       <button class="btn btn-sub" id="settings-btn">${t('game.settings')}</button>
     </div>
@@ -35,6 +39,10 @@ export function showTitle(
   screen.querySelector('#start-btn')!.addEventListener('click', () => {
     screen.remove();
     onStart(input.value.trim() || defaultSeed);
+  });
+  screen.querySelector('#daily-btn')!.addEventListener('click', () => {
+    screen.remove();
+    onDaily();
   });
   screen.querySelector('#workshop-btn')!.addEventListener('click', () => {
     screen.remove();

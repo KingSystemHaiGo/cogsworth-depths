@@ -49,6 +49,8 @@ const TEXTS = {
   'settings.sfx': { zh: '音效音量', en: 'SFX volume' },
 
   'game.workshop': { zh: '改 装 间', en: 'WORKSHOP' },
+  'game.daily': { zh: '每 日 挑 战', en: 'DAILY RUN' },
+  'daily.best': { zh: '今日最佳:第 {n} 层', en: 'Best today: floor {n}' },
   'meta.title': { zh: '改 装 间', en: 'WORKSHOP' },
   'meta.subtitle': { zh: '齿轮残片:{n} · 永久强化,死亡不失', en: 'Scrap: {n} · permanent upgrades, kept on death' },
   'meta.maxed': { zh: '已满级', en: 'MAX' },
