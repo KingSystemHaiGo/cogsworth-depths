@@ -14,6 +14,7 @@ import { Game } from './game/game.ts';
 import { synth } from './audio/synth.ts';
 import { music } from './audio/music.ts';
 import { showTitle, showPause, showGameOver, showSettings, showWorkshop, showCodex, SettingsValues } from './ui/screens.ts';
+import { TouchControls } from './ui/touch.ts';
 import { loadMeta, saveMeta, awardScrap, META_UPGRADES } from './core/meta.ts';
 import { loadCodex } from './core/codex.ts';
 
@@ -69,6 +70,25 @@ async function warmup(stage: ThreeStage, overlay: Overlay): Promise<void> {
   stage.scene.remove(g);
 }
 
+/** 性能画像:实测帧时间,核显自动从低档起步,独显保持高档 */
+async function measureAndSetTier(stage: ThreeStage): Promise<void> {
+  if (CONFIG.quality !== 'auto') return;
+  const avg = await new Promise<number>((resolve) => {
+    const times: number[] = [];
+    let last = performance.now();
+    const tick = (): void => {
+      const now = performance.now();
+      times.push(now - last);
+      last = now;
+      if (times.length < 40) requestAnimationFrame(tick);
+      else resolve(times.reduce((a, b) => a + b, 0) / times.length);
+    };
+    requestAnimationFrame(tick);
+  });
+  if (avg > 25) stage.setQualityTier(2);
+  else if (avg > 17) stage.setQualityTier(1);
+}
+
 async function main(): Promise<void> {
   // 加载提示(预热期间挡住)
   const loading = document.createElement('div');
@@ -95,11 +115,19 @@ async function main(): Promise<void> {
 
   const input = new Input(threeCanvas);
   const meta = loadMeta();
+  // 触屏设备:启用虚拟双摇杆(左移动/右瞄准射击)
+  const touch = new TouchControls(input, () => game.state === 'playing');
+  if (touch.active) {
+    input.moveAxisOverride = () => touch.touchAxis();
+  }
 
   // 预热:预编译所有 shader,完成后撤掉加载界面
   await warmup(stage, overlay);
   overlay.warmup();
   loading.remove();
+
+  // 性能画像:预热后实测 40 帧,自动选择初始画质档(画质优先,只降分辨率)
+  await measureAndSetTier(stage);
 
   const game = new Game(stage, overlay, input, () => {
     music.stop();

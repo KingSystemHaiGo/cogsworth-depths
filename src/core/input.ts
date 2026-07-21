@@ -81,8 +81,15 @@ export class Input {
     if (this.locked) document.exitPointerLock();
   }
 
+  /** 触屏覆盖:返回非 null 时优先于键盘 */
+  moveAxisOverride: (() => { x: number; y: number } | null) | null = null;
+
   /** 移动轴,范围 [-1,1] */
   moveAxis(): { x: number; y: number } {
+    if (this.moveAxisOverride) {
+      const t = this.moveAxisOverride();
+      if (t) return t;
+    }
     let x = 0;
     let y = 0;
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) x -= 1;

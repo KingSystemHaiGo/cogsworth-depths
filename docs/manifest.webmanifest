@@ -1,0 +1,18 @@
+{
+  "name": "Cogsworth Depths · 蒸汽深渊",
+  "short_name": "蒸汽深渊",
+  "description": "零素材全程序化生成的蒸汽朋克 2.5D 肉鸽",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0a0e12",
+  "theme_color": "#b08d57",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
