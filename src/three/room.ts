@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RNG } from '../core/rng.ts';
 import { CONFIG, PALETTE } from '../core/config.ts';
 import { toonMat, glowMat, toonGradient, makeBlobShadow } from './materials.ts';
+import { makeSteamLantern } from './factory/steamLantern.ts';
 import { makeGear, spinGears } from './factory/gears.ts';
 import { makePipeRun } from './factory/pipes.ts';
 import { SteamVent } from './factory/steam.ts';
@@ -289,15 +290,21 @@ export class Room {
       this.obstacles.push({ x: bx, z: bz, r: 1.1 });
     }
 
-    // 煤气灯:两盏对角点光,灯罩用发光球(吃 Bloom)
+    // 煤气灯:两盏对角点光,灯罩用参考图生成的黄铜蒸汽灯笼
     for (const side of [-1, 1]) {
       const lamp = new THREE.PointLight(0xffb35c, 34, 24, 1.5);
       lamp.position.set(side * w * 0.28, wallH * 0.8, 0);
       this.claim(side * w * 0.28, 0, 0.7, doorSides);
       this.group.add(lamp);
       this.lamps.push(lamp);
-      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), emberMat);
+      // 蒸汽灯笼(参考图→轮廓旋成管线生成),灯芯放发光球
+      const lantern = makeSteamLantern();
+      lantern.scale.setScalar(0.55);
+      lantern.position.set(lamp.position.x, lamp.position.y - 0.55, lamp.position.z);
+      this.group.add(lantern);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), emberMat);
       bulb.position.copy(lamp.position);
+      bulb.position.y -= 0.15;
       this.group.add(bulb);
       // 灯杆
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, wallH * 0.8, 6), ironMat);

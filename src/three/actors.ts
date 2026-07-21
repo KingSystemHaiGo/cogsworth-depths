@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { PALETTE } from '../core/config.ts';
 import { toonMat, glowMat, addOutlines, makeBlobShadow } from './materials.ts';
 import { makeGear } from './factory/gears.ts';
+import { makeTopHat } from './factory/topHat.ts';
 
 const brassMat = toonMat(PALETTE.brass);
 const copperMat = toonMat(PALETTE.copper);
@@ -49,17 +50,11 @@ export function makePlayerMesh(): THREE.Group {
     rim.position.set(side * 0.13, 1.34, 0.27);
     body.add(rim);
   }
-  // 高礼帽(帽筒 + 帽檐)
-  const hatTop = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.23, 0.34, 10), hatMat);
-  hatTop.position.y = 1.62;
-  body.add(hatTop);
-  const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.05, 12), hatMat);
-  hatBrim.position.y = 1.48;
-  body.add(hatBrim);
-  const hatBand = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.03, 6, 12), brassMat);
-  hatBand.rotation.x = Math.PI / 2;
-  hatBand.position.y = 1.5;
-  body.add(hatBand);
+  // 高礼帽(参考图→轮廓旋成管线生成,比手工拼的更挺括)
+  const hat = makeTopHat();
+  hat.scale.setScalar(0.52);
+  hat.position.y = 1.42;
+  body.add(hat);
 
   // 背包小齿轮
   const gear = makeGear(0.3, 8, 0.12, 2.2);
