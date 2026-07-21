@@ -4,6 +4,7 @@ import { PALETTE } from '../core/config.ts';
 import { toonMat, glowMat, addOutlines, makeBlobShadow } from './materials.ts';
 import { makeGear } from './factory/gears.ts';
 import { makeTopHat } from './factory/topHat.ts';
+import { makeSpiderBot } from './factory/spiderBot.ts';
 
 const brassMat = toonMat(PALETTE.brass);
 const copperMat = toonMat(PALETTE.copper);
@@ -254,28 +255,15 @@ function buildEnemyMesh(kind: EnemyKind): THREE.Group {
       return g;
     }
     case 'chaser': {
-      // 发条蜘蛛:铁球身体 + 细腿 + 头顶发条齿轮壳
+      // 发条蜘蛛:参考图挤出的真实蜘蛛剪影(含腿)+ 发光复眼 + 背后发条钥匙
       const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.45, 10, 8), ironMat);
-      body.position.y = 0.55;
-      g.add(body);
-      const shell = makeGear(0.3, 8, 0.1, 1.6);
-      shell.rotation.x = Math.PI / 2;
-      shell.position.y = 0.98;
-      g.add(shell);
-      g.userData.gear = shell;
+      const spider = makeSpiderBot();
+      spider.rotation.x = -Math.PI / 2; // 平放在地面,俯视就是真蜘蛛
+      spider.scale.setScalar(0.62);
+      g.add(spider);
       const eye = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), emberMat);
-      eye.position.set(0, 0.6, 0.4);
+      eye.position.set(0, 0.5, 0.3);
       g.add(eye);
-      const legGeo = new THREE.CylinderGeometry(0.04, 0.02, 0.7, 5);
-      for (let i = 0; i < 6; i++) {
-        const leg = new THREE.Mesh(legGeo, ironDarkMat);
-        const a = (i / 6) * Math.PI * 2;
-        leg.position.set(Math.cos(a) * 0.5, 0.35, Math.sin(a) * 0.5);
-        leg.rotation.z = Math.cos(a) * 0.7;
-        leg.rotation.x = -Math.sin(a) * 0.7;
-        g.add(leg);
-      }
       // 背后发条钥匙(人偶标志,持续旋转)
       const keyGroup = new THREE.Group();
       const keyStem = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.22, 6), brassMat);
@@ -287,7 +275,7 @@ function buildEnemyMesh(kind: EnemyKind): THREE.Group {
         wing.position.set(side * 0.11, 0, 0.11);
         keyGroup.add(wing);
       }
-      keyGroup.position.set(0, 0.65, -0.55);
+      keyGroup.position.set(0, 0.55, -0.5);
       g.add(keyGroup);
       g.userData.keyWings = keyGroup;
       return g;

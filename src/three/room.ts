@@ -5,6 +5,7 @@ import { RNG } from '../core/rng.ts';
 import { CONFIG, PALETTE } from '../core/config.ts';
 import { toonMat, glowMat, toonGradient, makeBlobShadow } from './materials.ts';
 import { makeSteamLantern } from './factory/steamLantern.ts';
+import { makeValveWheel } from './factory/valveWheel.ts';
 import { makeGear, spinGears } from './factory/gears.ts';
 import { makePipeRun } from './factory/pipes.ts';
 import { SteamVent } from './factory/steam.ts';
@@ -444,6 +445,13 @@ export class Room {
     band.rotation.x = Math.PI / 2;
     band.position.y = 1.0;
     g.add(band);
+    // 侧面阀门轮(参考图旋成管线生成)
+    const valve = makeValveWheel();
+    valve.scale.setScalar(0.4);
+    valve.position.set(R * 0.9, 1.35, 0);
+    valve.rotation.z = Math.PI / 2;
+    g.add(valve);
+    g.userData.valve = valve;
     // 蒸汽喷口
     const vent = new SteamVent(rng, 20, 3);
     vent.position.set(0.3, 2.9, 0.2);

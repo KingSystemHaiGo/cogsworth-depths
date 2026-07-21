@@ -245,3 +245,301 @@ export function dominantColors(img: RGBA, mask: Uint8Array, k = 3): [number, num
   const order = centers.map((_, i) => i).sort((a, b) => sizes[b] - sizes[a]);
   return order.map((i) => [Math.round(centers[i][0]), Math.round(centers[i][1]), Math.round(centers[i][2])] as [number, number, number]);
 }
+
+// ============ 自适应分流与挤出路径 ============
+
+/** 左右对称度评分(0~1,1=完美对称)。>0.85 走旋成,否则走挤出 */
+export function symmetryScore(
+  mask: Uint8Array,
+  w: number,
+  bb: { minX: number; maxX: number; minY: number; maxY: number },
+  axisX: number,
+  h: number,
+): number {
+  let err = 0;
+  let total = 0;
+  for (let y = bb.minY; y <= bb.maxY; y += 2) {
+    let left = -1;
+    let right = -1;
+    for (let x = 0; x < w; x++) {
+      if (mask[y * w + x]) {
+        if (left < 0) left = x;
+        right = x;
+      }
+    }
+    if (left < 0) continue;
+    const dl = axisX - left;
+    const dr = right - axisX;
+    const w2 = Math.max(dl, dr, 1);
+    err += Math.abs(dl - dr) / w2;
+    total++;
+  }
+  return total > 0 ? 1 - err / total : 0;
+}
+
+/** Moore 邻域追踪(Jacob 停止准则):返回完整有序外轮廓 */
+export function traceContour(mask: Uint8Array, w: number, h: number, startX: number, startY: number): Point[] {
+  const at = (x: number, y: number): number => (x >= 0 && y >= 0 && x < w && y < h ? mask[y * w + x] : 0);
+  // 8 邻域顺时针:右、右下、下、左下、左、左上、上、右上
+  const dirs = [
+    [1, 0],
+    [1, 1],
+    [0, 1],
+    [-1, 1],
+    [-1, 0],
+    [-1, -1],
+    [0, -1],
+    [1, -1],
+  ];
+  const contour: Point[] = [{ x: startX, y: startY }];
+  let bx = startX;
+  let by = startY;
+  // 回溯点:起点左侧(它是背景)
+  let px = startX - 1;
+  let py = startY;
+  const maxSteps = w * h * 4;
+  for (let step = 0; step < maxSteps; step++) {
+    // 从回溯点的下一个(顺时针)开始找前景
+    const startDir = dirs.findIndex(([dx, dy]) => bx + dx === px && by + dy === py);
+    let found = false;
+    for (let k = 1; k <= 8; k++) {
+      const nd = (startDir + k) % 8;
+      const nx = bx + dirs[nd][0];
+      const ny = by + dirs[nd][1];
+      if (at(nx, ny)) {
+        // 新回溯点 = 找到的前景邻居的前一个(逆时针)
+        const pd = (nd + 7) % 8;
+        px = bx + dirs[pd][0];
+        py = by + dirs[pd][1];
+        bx = nx;
+        by = ny;
+        found = true;
+        break;
+      }
+    }
+    if (!found) break; // 孤立点
+    if (bx === startX && by === startY && contour.length > 4) break;
+    contour.push({ x: bx, y: by });
+  }
+  return contour;
+}
+
+/** 找主体最上最左像素作为追踪起点 */
+export function findStart(mask: Uint8Array, w: number, h: number, bb: { minX: number; maxX: number; minY: number; maxY: number }): Point | null {
+  for (let y = bb.minY; y <= bb.maxY; y++) {
+    for (let x = bb.minX; x <= bb.maxX; x++) {
+      if (mask[y * w + x]) return { x, y };
+    }
+  }
+  return null;
+}
+
+/** 2D Douglas-Peucker 简化(用于挤出轮廓) */
+export function simplify2D(pts: Point[], epsilon: number): Point[] {
+  if (pts.length <= 2) return pts;
+  const keep = new Uint8Array(pts.length);
+  keep[0] = keep[pts.length - 1] = 1;
+  const dist = (p: Point, a: Point, b: Point): number => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-9) return Math.hypot(p.x - a.x, p.y - a.y);
+    return Math.abs(dy * (p.x - a.x) - dx * (p.y - a.y)) / len;
+  };
+  const recurse = (i0: number, i1: number): void => {
+    if (i1 <= i0 + 1) return;
+    let maxD = 0;
+    let maxI = -1;
+    for (let i = i0 + 1; i < i1; i++) {
+      const d = dist(pts[i], pts[i0], pts[i1]);
+      if (d > maxD) {
+        maxD = d;
+        maxI = i;
+      }
+    }
+    if (maxD > epsilon && maxI > 0) {
+      keep[maxI] = 1;
+      recurse(i0, maxI);
+      recurse(maxI, i1);
+    }
+  };
+  recurse(0, pts.length - 1);
+  return pts.filter((_, i) => keep[i]);
+}
+
+/** 点是否在多边形内(射线法) */
+export function pointInPolygon(p: Point, poly: Point[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i];
+    const b = poly[j];
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/** 提取内孔轮廓:扫描主体内部 0→1 过渡点,追踪并判定为孔 */
+export function extractHoles(mask: Uint8Array, w: number, h: number, bb: { minX: number; maxX: number; minY: number; maxY: number }): Point[][] {
+  const holes: Point[][] = [];
+  const visited = new Set<number>();
+  for (let y = bb.minY + 1; y < bb.maxY; y++) {
+    for (let x = bb.minX + 1; x < bb.maxX; x++) {
+      const idx = y * w + x;
+      // 背景像素,左边是主体,且未被访问 → 可能是孔的起始
+      if (!mask[idx] && mask[idx - 1] && !visited.has(idx)) {
+        // flood fill 该背景区域
+        const region: number[] = [idx];
+        const stack = [idx];
+        visited.add(idx);
+        let touchesEdge = false;
+        let minX = x, maxX = x, minY = y, maxY = y;
+        while (stack.length) {
+          const ci = stack.pop()!;
+          const cx = ci % w;
+          const cy = (ci / w) | 0;
+          if (cx <= bb.minX || cx >= bb.maxX || cy <= bb.minY || cy >= bb.maxY) {
+            touchesEdge = true;
+          }
+          if (cx < minX) minX = cx;
+          if (cx > maxX) maxX = cx;
+          if (cy < minY) minY = cy;
+          if (cy > maxY) maxY = cy;
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nx = cx + dx;
+            const ny = cy + dy;
+            const ni = ny * w + nx;
+            if (nx >= 0 && ny >= 0 && nx < w && ny < h && !mask[ni] && !visited.has(ni)) {
+              visited.add(ni);
+              stack.push(ni);
+              region.push(ni);
+            }
+          }
+        }
+        // 不触碰主体边缘的封闭背景 = 孔
+        if (!touchesEdge && region.length > 20) {
+          // 用区域近似多边形(取边界简化为 8 点)
+          const holePts: Point[] = [];
+          const n = 8;
+          const cx = (minX + maxX) / 2;
+          const cy = (minY + maxY) / 2;
+          const rx = (maxX - minX) / 2;
+          const ry = (maxY - minY) / 2;
+          for (let i = 0; i < n; i++) {
+            const a = (i / n) * Math.PI * 2;
+            holePts.push({ x: cx + Math.cos(a) * rx, y: cy + Math.sin(a) * ry });
+          }
+          holes.push(holePts);
+        }
+      }
+    }
+  }
+  return holes;
+}
+
+/** 连通比例:逐行统计剪影连续段数,单段行占比。
+ *  旋转体(锅炉/帽子/灯笼)每行只有一段;多腿/多管图形会有多段 → 判挤出 */
+export function contiguityRatio(mask: Uint8Array, w: number, bb: { minX: number; maxX: number; minY: number; maxY: number }): number {
+  let single = 0;
+  let total = 0;
+  for (let y = bb.minY; y <= bb.maxY; y += 2) {
+    let runs = 0;
+    let inRun = false;
+    for (let x = bb.minX; x <= bb.maxX; x++) {
+      const v = mask[y * w + x];
+      if (v && !inRun) {
+        runs++;
+        inRun = true;
+      } else if (!v) {
+        inRun = false;
+      }
+    }
+    if (runs > 0) {
+      total++;
+      if (runs === 1) single++;
+    }
+  }
+  return total > 0 ? single / total : 0;
+}
+
+/** 轴覆盖率:剪影覆盖对称轴的行数占比。旋转体的躯干必须包轴,
+ *  阀门/法兰(轴处有空隙)和多腿生物(腿在两翼)覆盖率低 → 判挤出 */
+export function axisCoverage(mask: Uint8Array, w: number, bb: { minX: number; maxX: number; minY: number; maxY: number }, axisX: number): number {
+  let covered = 0;
+  let total = 0;
+  const ax = Math.round(axisX);
+  for (let y = bb.minY; y <= bb.maxY; y += 2) {
+    let has = false;
+    let axisIn = false;
+    for (let x = bb.minX; x <= bb.maxX; x++) {
+      const v = mask[y * w + x];
+      if (v) {
+        has = true;
+        if (Math.abs(x - ax) <= 2) axisIn = true;
+      }
+    }
+    if (has) {
+      total++;
+      if (axisIn) covered++;
+    }
+  }
+  return total > 0 ? covered / total : 0;
+}
+
+/** 提取最大连通分量(处理图标中分离的小部件,如蜘蛛的拱顶) */
+export function largestComponent(mask: Uint8Array, w: number, h: number): Uint8Array {
+  const labels = new Int32Array(w * h).fill(-1);
+  const sizes: number[] = [];
+  for (let i = 0; i < w * h; i++) {
+    if (!mask[i] || labels[i] >= 0) continue;
+    const id = sizes.length;
+    let size = 0;
+    const stack = [i];
+    labels[i] = id;
+    while (stack.length) {
+      const ci = stack.pop()!;
+      size++;
+      const cx = ci % w;
+      const cy = (ci / w) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        const ni = ny * w + nx;
+        if (nx >= 0 && ny >= 0 && nx < w && ny < h && mask[ni] && labels[ni] < 0) {
+          labels[ni] = id;
+          stack.push(ni);
+        }
+      }
+    }
+    sizes.push(size);
+  }
+  let best = 0;
+  for (let i = 1; i < sizes.length; i++) if (sizes[i] > sizes[best]) best = i;
+  const out = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) out[i] = labels[i] === best ? 1 : 0;
+  return out;
+}
+
+/** 形态学膨胀(方形核):把分段的白色部件桥接成整体,供外轮廓追踪 */
+export function dilate(mask: Uint8Array, w: number, h: number, radius: number): Uint8Array {
+  const out = new Uint8Array(mask);
+  const w2 = w * h;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (mask[y * w + x]) continue;
+      outer: for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx >= 0 && ny >= 0 && nx < w && ny < h && mask[ny * w + nx]) {
+            out[y * w + x] = 1;
+            break outer;
+          }
+        }
+      }
+    }
+  }
+  void w2;
+  return out;
+}
