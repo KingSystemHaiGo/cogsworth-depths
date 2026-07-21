@@ -122,6 +122,7 @@ export class Game {
   private rollCd = 0;
   private rollX = 0;
   private rollZ = 0;
+  private stridePhase = 0; // 步幅相位(随位移推进)
   private comboCount = 0;
   private comboTimer = 0;
   private enemyHpList: { x: number; z: number; ratio: number }[] = [];
@@ -571,7 +572,7 @@ export class Game {
     p.z = this.collideWorld(p.x, p.z, 0.5).z;
 
     // 瞄准(每帧即时,无平滑无延迟)
-    this.updateAimFacing();
+    this.updateAimFacing(dt);
 
     // 开火
     p.fireCd -= dt;
@@ -595,13 +596,16 @@ export class Game {
       p.mesh!.visible = true;
     }
 
-    // 网格动画:走路摆腿(炮口朝向由 updateAimFacing 每帧即时设置)
+    // 网格动画:走路摆腿(步幅相位跟随实际位移,而非挂钟时间——
+    // 帧率波动时动画和移动严格同步,不会一卡一卡地"抖腿")
     const moving = Math.abs(axis.x) + Math.abs(axis.y) > 0;
     const t = performance.now() / 1000;
     const legL = p.mesh!.userData.legL as THREE.Mesh;
     const legR = p.mesh!.userData.legR as THREE.Mesh;
-    legL.position.z = moving ? Math.sin(t * 12) * 0.18 : 0;
-    legR.position.z = moving ? -Math.sin(t * 12) * 0.18 : 0;
+    if (moving) this.stridePhase += this.stats.speed * dt * 1.5;
+    const strideAmp = moving ? 0.18 : 0;
+    legL.position.z = Math.sin(this.stridePhase) * strideAmp;
+    legR.position.z = -Math.sin(this.stridePhase) * strideAmp;
     const gear = body.userData.gear as THREE.Mesh;
     if (gear) gear.rotation.z += dt * 2.2;
     // 压力表指针随移动摆动
@@ -613,7 +617,7 @@ export class Game {
   private groundVec = new THREE.Vector3();
 
   /** 每帧即时瞄准:准星在哪,炮口立刻转向哪(顿帧期间也保持) */
-  private updateAimFacing(): void {
+  private updateAimFacing(dt: number): void {
     const p = this.player;
     if (!p.mesh) return;
     const ground = this.groundVec;
@@ -628,7 +632,13 @@ export class Game {
     }
     if (this.rollT <= 0) {
       const body = p.mesh.userData.body as THREE.Group;
-      body.rotation.y = Math.atan2(p.aimX, p.aimZ);
+      // 角速度上限:瞄准仍然跟手,但跨过准星时不会一帧翻转 180°(观感抖动的主因)
+      const targetRot = Math.atan2(p.aimX, p.aimZ);
+      let diff = targetRot - body.rotation.y;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      const maxTurn = 25 * dt; // 25 rad/s,小角度即时,大翻转 ~7 帧完成
+      body.rotation.y += THREE.MathUtils.clamp(diff, -maxTurn, maxTurn);
     }
   }
 

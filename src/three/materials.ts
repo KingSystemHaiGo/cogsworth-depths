@@ -88,14 +88,24 @@ function makeBlobTexture(): THREE.Texture {
 
 const blobTex = makeBlobTexture();
 
-/** 假阴影贴片:让角色/物体"贴地",廉价但效果巨大 */
+/** 假阴影贴片:让角色/物体"贴地",廉价但效果巨大。
+ *  polygonOffset 防止与地板共面 z-fighting 闪烁 */
 export function makeBlobShadow(radius: number, opacity = 0.4): THREE.Mesh {
   const m = new THREE.Mesh(
     new THREE.PlaneGeometry(radius * 2, radius * 2),
-    new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, opacity, depthWrite: false }),
+    new THREE.MeshBasicMaterial({
+      map: blobTex,
+      transparent: true,
+      opacity,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    }),
   );
   m.rotation.x = -Math.PI / 2;
-  m.position.y = 0.02;
+  m.position.y = 0.03;
+  m.renderOrder = 1;
   m.userData.noOutline = true;
   return m;
 }

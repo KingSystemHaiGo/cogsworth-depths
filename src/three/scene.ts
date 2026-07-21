@@ -145,6 +145,9 @@ export class ThreeStage {
   private bloomPass: UnrealBloomPass;
   private celPass: ShaderPass;
   private gradePass: ShaderPass;
+  private dbSize = new THREE.Vector2();
+
+  /** 后处理分辨率用物理像素(pixelRatio 1.5),像素化块才能对齐到整数像素不闪 */
   private camTarget = new THREE.Vector3();
   private shakeAmp = 0;
   private shakeOffset = new THREE.Vector3();
@@ -180,7 +183,8 @@ export class ThreeStage {
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.celPass = new ShaderPass(CelShader);
-    this.celPass.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+    this.renderer.getDrawingBufferSize(this.dbSize);
+    this.celPass.uniforms.uResolution.value.copy(this.dbSize);
     this.composer.addPass(this.celPass);
     this.bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
@@ -190,7 +194,7 @@ export class ThreeStage {
     );
     this.composer.addPass(this.bloomPass);
     this.gradePass = new ShaderPass(GradeShader);
-    this.gradePass.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+    this.gradePass.uniforms.uResolution.value.copy(this.dbSize);
     this.composer.addPass(this.gradePass);
   }
 
@@ -260,8 +264,9 @@ export class ThreeStage {
   resize(): void {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.composer.setSize(window.innerWidth, window.innerHeight);
-    this.celPass.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
-    this.gradePass.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+    this.renderer.getDrawingBufferSize(this.dbSize);
+    this.celPass.uniforms.uResolution.value.copy(this.dbSize);
+    this.gradePass.uniforms.uResolution.value.copy(this.dbSize);
     this.updateCameraFrustum();
   }
 
