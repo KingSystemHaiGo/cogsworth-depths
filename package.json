@@ -1,0 +1,27 @@
+{
+  "name": "cogsworth-depths",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build --outDir docs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "lil-gui": "^0.20.0",
+    "pixi.js": "^8.6.0",
+    "seedrandom": "^3.0.5",
+    "stats.js": "^0.17.0",
+    "three": "^0.171.0"
+  },
+  "devDependencies": {
+    "@types/seedrandom": "^3.0.8",
+    "@types/stats.js": "^0.17.3",
+    "@types/three": "^0.171.0",
+    "playwright": "^1.61.1",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.0",
+    "vite-plugin-singlefile": "^2.3.3"
+  }
+}

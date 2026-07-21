@@ -1,0 +1,241 @@
+/* ===== 蒸汽朋克 UI 规范 =====
+   铁板面板 + 黄铜描边 + 四角铆钉 + 雕版文字 + 对角拉丝纹理 */
+
+:root {
+  --brass: #b08d57;
+  --brass-light: #e8c877;
+  --brass-dim: #7a6540;
+  --ink: #0a0e12;
+  --panel: #141a21;
+  --text: #d8c9a3;
+  --text-dim: #9a8a68;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #0a0e12;
+  font-family: Georgia, 'Times New Roman', 'Microsoft YaHei', serif;
+  user-select: none;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+#three-canvas,
+#pixi-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: none; /* 用游戏内准星替代系统光标 */
+}
+
+#pixi-canvas {
+  pointer-events: none;
+}
+
+#ui-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --- 铆钉面板 --- */
+.screen {
+  pointer-events: auto;
+  position: relative;
+  text-align: center;
+  color: var(--text);
+  background:
+    /* 四角铆钉 */
+    radial-gradient(circle 5px at 14px 14px, var(--brass-light) 0 1.5px, #5a4a30 3px, transparent 3.5px),
+    radial-gradient(circle 5px at calc(100% - 14px) 14px, var(--brass-light) 0 1.5px, #5a4a30 3px, transparent 3.5px),
+    radial-gradient(circle 5px at 14px calc(100% - 14px), var(--brass-light) 0 1.5px, #5a4a30 3px, transparent 3.5px),
+    radial-gradient(circle 5px at calc(100% - 14px) calc(100% - 14px), var(--brass-light) 0 1.5px, #5a4a30 3px, transparent 3.5px),
+    /* 漫画半调网点 */
+    radial-gradient(circle 1px, rgba(232, 200, 119, 0.055) 1px, transparent 1.6px),
+    /* 对角拉丝 */
+    repeating-linear-gradient(45deg, rgba(255,255,255,0.014) 0 2px, transparent 2px 6px),
+    linear-gradient(180deg, #161d25, #0e1319);
+  background-size:
+    auto, auto, auto, auto,
+    7px 7px,
+    auto, auto;
+  border: 2px solid var(--brass);
+  outline: 1px solid #3a2f1c;
+  outline-offset: 3px;
+  border-radius: 6px;
+  padding: 44px 64px;
+  box-shadow:
+    0 0 50px rgba(176, 141, 87, 0.18),
+    0 12px 40px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(232, 200, 119, 0.15);
+  max-width: 72vw;
+  cursor: auto;
+}
+
+/* 面板顶部的齿轮装饰条 */
+.screen::before {
+  content: '⚙ ⚙ ⚙';
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 14px;
+  background: var(--ink);
+  color: var(--brass-dim);
+  font-size: 15px;
+  letter-spacing: 8px;
+}
+
+.screen h1 {
+  margin: 0 0 10px;
+  font-size: 44px;
+  font-weight: bold;
+  letter-spacing: 8px;
+  background: linear-gradient(180deg, #f5dfa0 30%, var(--brass) 75%, #6a5535);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.8));
+}
+
+.screen h2 {
+  margin: 0 0 26px;
+  font-size: 14px;
+  font-weight: normal;
+  letter-spacing: 5px;
+  color: var(--text-dim);
+}
+
+.screen .stats-line {
+  font-size: 15px;
+  line-height: 2;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+/* --- 雕版按钮 --- */
+.screen .btn {
+  display: inline-block;
+  margin: 10px 8px 0;
+  padding: 13px 40px;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: bold;
+  letter-spacing: 3px;
+  color: #1a1408;
+  text-shadow: 0 1px 0 rgba(255, 240, 200, 0.5);
+  background: linear-gradient(180deg, #f0d68a 0%, var(--brass) 55%, #8a6d42 100%);
+  border: 1px solid #5a4a2c;
+  border-radius: 4px;
+  box-shadow:
+    0 3px 0 #4a3a20,
+    0 6px 14px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 245, 210, 0.6);
+  cursor: pointer;
+  transition: transform 0.08s, box-shadow 0.08s, filter 0.12s;
+}
+
+.screen .btn:hover {
+  filter: brightness(1.12);
+  box-shadow:
+    0 3px 0 #4a3a20,
+    0 6px 20px rgba(232, 200, 119, 0.35),
+    inset 0 1px 0 rgba(255, 245, 210, 0.6);
+}
+
+.screen .btn:active {
+  transform: translateY(3px);
+  box-shadow:
+    0 0 0 #4a3a20,
+    0 2px 8px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 245, 210, 0.4);
+}
+
+.screen .seed-row {
+  margin: 18px 0 6px;
+  font-size: 14px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+}
+
+.screen input[type='text'] {
+  pointer-events: auto;
+  background: #0c1116;
+  border: 1px solid var(--brass);
+  border-radius: 4px;
+  color: var(--brass-light);
+  padding: 9px 14px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 3px;
+  text-align: center;
+  width: 210px;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.screen input[type='text']:focus {
+  outline: 1px solid var(--brass-light);
+}
+
+/* --- 升级卡片 --- */
+.upgrade-cards {
+  display: flex;
+  gap: 22px;
+  justify-content: center;
+  margin-top: 14px;
+}
+
+.upgrade-card {
+  pointer-events: auto;
+  position: relative;
+  width: 190px;
+  padding: 26px 18px 22px;
+  background:
+    radial-gradient(circle 4px at 10px 10px, var(--brass-light) 0 1.2px, #5a4a30 2.5px, transparent 3px),
+    radial-gradient(circle 4px at calc(100% - 10px) 10px, var(--brass-light) 0 1.2px, #5a4a30 2.5px, transparent 3px),
+    radial-gradient(circle 4px at 10px calc(100% - 10px), var(--brass-light) 0 1.2px, #5a4a30 2.5px, transparent 3px),
+    radial-gradient(circle 4px at calc(100% - 10px) calc(100% - 10px), var(--brass-light) 0 1.2px, #5a4a30 2.5px, transparent 3px),
+    linear-gradient(180deg, #1b232d, #11161c);
+  border: 2px solid var(--brass-dim);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.upgrade-card:hover {
+  border-color: var(--brass-light);
+  transform: translateY(-5px);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.6), 0 0 24px rgba(232, 200, 119, 0.2);
+}
+
+.upgrade-card .icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+  color: var(--brass-light);
+  text-shadow: 0 0 14px rgba(232, 200, 119, 0.5);
+}
+
+.upgrade-card .name {
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  color: var(--brass-light);
+  margin-bottom: 10px;
+}
+
+.upgrade-card .desc {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
