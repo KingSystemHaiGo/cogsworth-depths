@@ -22,6 +22,7 @@ export const CONFIG = {
   bloom: true,
   bloomStrength: 0.55,
   fogDensity: 0.006,
+  quality: 'auto' as 'auto' | 'high' | 'medium' | 'low', // 画质:auto 自动降档
   // 风格化滤镜
   posterize: 14, // 亮度色阶级数,<=1 关闭
   pixelSize: 1.0, // 像素化块大小,<0.5 关闭

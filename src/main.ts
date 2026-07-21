@@ -145,6 +145,10 @@ async function main(): Promise<void> {
   });
   gui.add(CONFIG, 'masterVolume', 0, 1, 0.05).name('音量').onChange((v: number) => synth.setVolume(v));
   gui.add(CONFIG, 'musicVolume', 0, 1, 0.05).name('音乐音量').onChange((v: number) => music.setVolume(v));
+  gui
+    .add(CONFIG, 'quality', { 自动: 'auto', 高: 'high', 中: 'medium', 低: 'low' })
+    .name('画质')
+    .onChange(() => applyQualityMode());
   const gameplay = gui.addFolder('手感');
   gameplay.add(CONFIG, 'aimSensitivity', 0.3, 3, 0.1).name('准星灵敏度');
   gameplay.add(CONFIG, 'playerSpeed', 4, 14, 0.5).name('移动速度');
@@ -180,6 +184,42 @@ async function main(): Promise<void> {
   window.addEventListener('resize', () => stage.resize());
 
   // 主循环(固定上限 dt,防止切后台后跳变)
+  // FPS 指数移动平均 + 自动画质:低于 48fps 持续 2s 降档,高于 57fps 持续 10s 回升
+  let emaFps = 60;
+  let lowTimer = 0;
+  let highTimer = 0;
+
+  function applyQualityMode(): void {
+    if (CONFIG.quality === 'high') stage.setQualityTier(0);
+    else if (CONFIG.quality === 'medium') stage.setQualityTier(1);
+    else if (CONFIG.quality === 'low') stage.setQualityTier(2);
+    // auto:交给帧率监控
+  }
+
+  function autoQuality(dt: number): void {
+    if (dt > 0) emaFps = emaFps * 0.95 + (1 / dt) * 0.05;
+    if (CONFIG.quality !== 'auto') return;
+    const tier = stage.qualityTier;
+    if (emaFps < 48 && tier < 2) {
+      lowTimer += dt;
+      highTimer = 0;
+      if (lowTimer > 2) {
+        stage.setQualityTier((tier + 1) as 0 | 1 | 2);
+        lowTimer = 0;
+      }
+    } else if (emaFps > 57 && tier > 0) {
+      highTimer += dt;
+      lowTimer = 0;
+      if (highTimer > 10) {
+        stage.setQualityTier((tier - 1) as 0 | 1 | 2);
+        highTimer = 0;
+      }
+    } else {
+      lowTimer = 0;
+      highTimer = 0;
+    }
+  }
+
   let last = performance.now();
   function frame(now: number): void {
     requestAnimationFrame(frame);
@@ -188,6 +228,7 @@ async function main(): Promise<void> {
     last = now;
     const time = now / 1000;
 
+    autoQuality(dt);
     // 注意顺序:先更新相机(含跟随),再跑游戏逻辑。
     // 否则瞄准时用的是上一帧的相机矩阵,相机滑动时炮口和准星会有偏差
     stage.update(dt);
