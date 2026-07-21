@@ -200,6 +200,19 @@ export class Overlay {
     this.wts = fn;
   }
 
+  /** 预热:把所有显示对象类型画一遍,触发 Pixi 着色器首次编译 */
+  warmup(): void {
+    const g = new Graphics();
+    g.circle(0, 0, 10).fill(0xffffff);
+    g.roundRect(0, 0, 10, 10, 2).fill(0xffffff).stroke({ color: 0xffffff, width: 1 });
+    const t = new Text({ text: '预热 warmup', style: this.hudStyle });
+    this.fxLayer.addChild(g, t);
+    this.app.render();
+    this.fxLayer.removeChild(g, t);
+    g.destroy();
+    t.destroy();
+  }
+
   // ---------- 准星(屏幕空间,与虚拟光标 1:1) ----------
 
   setCrosshairVisible(v: boolean): void {

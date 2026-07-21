@@ -5,8 +5,10 @@ import Stats from 'stats.js';
 import GUI from 'lil-gui';
 import { CONFIG } from './core/config.ts';
 import { Input } from './core/input.ts';
-import { randomSeed } from './core/rng.ts';
+import { randomSeed, RNG } from './core/rng.ts';
 import { ThreeStage } from './three/scene.ts';
+import { Room } from './three/room.ts';
+import { makePlayerMesh, makeEnemyMesh, EnemyKind } from './three/actors.ts';
 import { Overlay } from './pixi/overlay.ts';
 import { Game } from './game/game.ts';
 import { synth } from './audio/synth.ts';
@@ -30,7 +32,50 @@ function saveVolumes(v: SettingsValues): void {
   localStorage.setItem(VOL_KEY, JSON.stringify(v));
 }
 
+/** 加载预热:离屏生成所有材质类型的物体并预编译 shader,
+ *  避免点开始游戏时爆发首次编译卡顿(核显上可卡数秒) */
+async function warmup(stage: ThreeStage, overlay: Overlay): Promise<void> {
+  const g = new THREE.Group();
+  // 覆盖所有材质与几何类型:房间装饰 + 玩家 + 全部敌人 + Boss
+  const room = new Room(new RNG('warmup'), []);
+  g.add(room.group);
+  g.add(makePlayerMesh());
+  const kinds: EnemyKind[] = [
+    'chaser', 'shooter', 'bomber', 'dasher', 'splitter',
+    'warden', 'mortar', 'sniper', 'tinker', 'boss', 'ringmaster',
+  ];
+  kinds.forEach((k, i) => {
+    const m = makeEnemyMesh(k);
+    m.position.set(i * 2 - 10, 0, 40); // 摆到视野外
+    g.add(m);
+  });
+  stage.scene.add(g);
+  // 预编译全部着色器(优先异步 API)
+  const renderer = stage.renderer as THREE.WebGLRenderer & {
+    compileAsync?: (s: THREE.Scene, c: THREE.Camera) => Promise<void>;
+  };
+  if (renderer.compileAsync) {
+    await renderer.compileAsync(stage.scene, stage.camera);
+  } else {
+    renderer.compile(stage.scene, stage.camera);
+  }
+  // 实际渲染几帧,驱动后处理链与 Pixi 完成首次编译
+  for (let i = 0; i < 3; i++) {
+    stage.render(i * 0.016);
+    overlay.update(0.016, 0, 0, false, 1);
+    await new Promise((r) => requestAnimationFrame(r));
+  }
+  stage.scene.remove(g);
+}
+
 async function main(): Promise<void> {
+  // 加载提示(预热期间挡住)
+  const loading = document.createElement('div');
+  loading.className = 'screen';
+  loading.style.pointerEvents = 'auto';
+  loading.innerHTML = '<h1 style="font-size:28px">锅 炉 加 压 中 …</h1>';
+  document.getElementById('ui-layer')!.appendChild(loading);
+
   const threeCanvas = document.getElementById('three-canvas') as HTMLCanvasElement;
   const pixiCanvas = document.getElementById('pixi-canvas') as HTMLCanvasElement;
 
@@ -49,6 +94,11 @@ async function main(): Promise<void> {
 
   const input = new Input(threeCanvas);
   const meta = loadMeta();
+
+  // 预热:预编译所有 shader,完成后撤掉加载界面
+  await warmup(stage, overlay);
+  overlay.warmup();
+  loading.remove();
 
   const game = new Game(stage, overlay, input, () => {
     music.stop();
