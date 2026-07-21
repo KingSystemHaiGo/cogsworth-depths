@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build --outDir docs && vite build --outDir dist",
+    "build": "tsc && vite build --outDir docs && vite build --outDir docs --config vite.showcase.config.ts && vite build --outDir dist",
     "preview": "vite preview"
   },
   "dependencies": {

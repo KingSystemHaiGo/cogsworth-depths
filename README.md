@@ -9,6 +9,8 @@
 
 **[https://kingsystemhaigo.github.io/cogsworth-depths/](https://kingsystemhaigo.github.io/cogsworth-depths/)**
 
+**[模型与 HUD 展示台](https://kingsystemhaigo.github.io/cogsworth-depths/showcase.html)** — 全部程序化模型与 HUD 效果的调研页
+
 构建产物是单个自包含 HTML 文件(`docs/index.html`,约 1.2MB),也可以下载后双击离线游玩。
 
 ## 截图

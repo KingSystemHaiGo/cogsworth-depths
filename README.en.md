@@ -9,6 +9,8 @@ Not a single image or audio file ships with this project — models, textures, V
 
 **[https://kingsystemhaigo.github.io/cogsworth-depths/](https://kingsystemhaigo.github.io/cogsworth-depths/)**
 
+**[Model & HUD Showcase](https://kingsystemhaigo.github.io/cogsworth-depths/showcase.html)** — gallery of all procedural models and HUD effects
+
 The build is a single self-contained HTML file (`docs/index.html`, ~1.2MB) — you can also download it and double-click to play offline.
 
 ## Screenshots
