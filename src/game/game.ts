@@ -262,7 +262,7 @@ export class Game {
     const node = this.floor.rooms[nodeId];
     this.currentNode = node;
     const doorSides = Object.keys(node.links) as DoorSide[];
-    this.room = new Room(this.rng, doorSides);
+    this.room = new Room(this.rng, doorSides, (this.floorIndex - 1) % 4);
     this.stage.scene.add(this.room.group);
     this.room.setAllDoors(node.cleared);
 

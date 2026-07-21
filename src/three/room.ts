@@ -55,6 +55,43 @@ function makeFloorTexture(): THREE.Texture {
 
 const floorTex = makeFloorTexture();
 
+/** 代码绘制木地板纹理(人偶剧场层用):木板 + 色差 + 纹理线 */
+function makeWoodTexture(): THREE.Texture {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#2a1c12';
+  ctx.fillRect(0, 0, size, size);
+  const rows = 6;
+  const rh = size / rows;
+  for (let i = 0; i < rows; i++) {
+    const y = i * rh;
+    const v = 42 + (i % 3) * 8;
+    ctx.fillStyle = `rgb(${v},${Math.floor(v * 0.65)},${Math.floor(v * 0.4)})`;
+    ctx.fillRect(0, y + 2, size, rh - 4);
+    // 木纹线
+    ctx.strokeStyle = 'rgba(20,12,6,0.5)';
+    for (let k = 0; k < 5; k++) {
+      ctx.beginPath();
+      ctx.moveTo(0, y + 6 + k * (rh / 6) + Math.sin(i * 7 + k) * 3);
+      ctx.bezierCurveTo(size * 0.3, y + k * (rh / 5) + 4, size * 0.7, y + k * (rh / 5) + 8, size, y + 8 + k * (rh / 6));
+      ctx.stroke();
+    }
+    // 板缝
+    ctx.fillStyle = 'rgba(10,6,3,0.9)';
+    ctx.fillRect(0, y, size, 2);
+    // 错缝竖线
+    ctx.fillRect(((i * 173) % size), y, 2, rh);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const woodTex = makeWoodTexture();
+
 const ironMat = toonMat(PALETTE.iron);
 const wallMat = toonMat(PALETTE.wall);
 const brassMat = toonMat(PALETTE.brass);
@@ -100,19 +137,19 @@ export class Room {
   readonly w = CONFIG.roomW;
   readonly d = CONFIG.roomD;
 
-  constructor(rng: RNG, doorSides: DoorSide[]) {
+  constructor(rng: RNG, doorSides: DoorSide[], themeIdx?: number) {
     const { w, d } = this;
     const wallH = CONFIG.wallH;
     const doorGap = 4;
-    // 每房间随机主题
-    const theme = rng.pick(ROOM_THEMES);
+    // 主题:指定楼层主题或随机
+    const theme = themeIdx !== undefined ? ROOM_THEMES[themeIdx % ROOM_THEMES.length] : rng.pick(ROOM_THEMES);
     const themedWall = wallMat.clone();
     (themedWall.color as THREE.Color).set(theme.wall);
 
     // 地板
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(w, d),
-      new THREE.MeshToonMaterial({ map: floorTex.clone(), gradientMap: toonGradient }),
+      new THREE.MeshToonMaterial({ map: (themeIdx === 2 ? woodTex : floorTex).clone(), gradientMap: toonGradient }),
     );
     (floor.material as THREE.MeshToonMaterial).map!.repeat.set(w / 8, d / 8);
     (floor.material as THREE.MeshToonMaterial).color.set(theme.floor);
