@@ -15,6 +15,7 @@ import { synth } from './audio/synth.ts';
 import { music } from './audio/music.ts';
 import { showTitle, showPause, showGameOver, showSettings, showWorkshop, showCodex, SettingsValues } from './ui/screens.ts';
 import { TouchControls } from './ui/touch.ts';
+import { GamepadControls } from './core/gamepad.ts';
 import { loadMeta, saveMeta, awardScrap, META_UPGRADES } from './core/meta.ts';
 import { loadCodex } from './core/codex.ts';
 
@@ -120,6 +121,16 @@ async function main(): Promise<void> {
   if (touch.active) {
     input.moveAxisOverride = () => touch.touchAxis();
   }
+  // 手柄:左摇杆移动/右摇杆瞄准/A·RT 射击/X 冲刺/B 翻滚/Y 切武器/Start 暂停
+  const gamepad = new GamepadControls(input);
+  gamepad.onWeaponSwitch = () => {
+    // 复用 Q 切换路径:直接向按键集打一帧 KeyQ
+    input.keys.add('KeyQ');
+    setTimeout(() => input.keys.delete('KeyQ'), 50);
+  };
+  gamepad.onPause = () => {
+    if (game.state === 'playing') openPause();
+  };
 
   // 预热:预编译所有 shader,完成后撤掉加载界面
   await warmup(stage, overlay);
@@ -365,6 +376,15 @@ async function main(): Promise<void> {
     const time = now / 1000;
 
     autoQuality(dt);
+    // 手柄轮询(右摇杆瞄准需要玩家屏幕坐标)
+    if (gamepad.active) {
+      const ps = { x: 0, y: 0 };
+      stage.worldToScreen(new THREE.Vector3(game['player'].x, 0, game['player'].z), ps);
+      gamepad.update(game.state === 'playing', ps);
+      if (!touch.active && gamepad.active && game.state === 'playing') {
+        // 手柄在线且无摇杆输入时,才允许手柄设置 override;触屏优先
+      }
+    }
     // 注意顺序:先更新相机(含跟随),再跑游戏逻辑。
     // 否则瞄准时用的是上一帧的相机矩阵,相机滑动时炮口和准星会有偏差
     stage.update(dt);
