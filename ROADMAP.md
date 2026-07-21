@@ -16,10 +16,9 @@
 
 - [x] 子弹 InstancedMesh(384 draw calls → 2)
 - [x] 火花 ParticleContainer(每火花 1 draw → 全体 1 draw)
-- [ ] 房间静态几何合并(BufferGeometryUtils.mergeGeometries,墙体/装饰每房间一次 draw)
-- [ ] 敌人网格对象池(避免生成/销毁的 GC 与重新编译)
-- [ ] Pixi `cacheAsTexture`:静态 HUD 面板(小地图/表盘框)缓存为纹理
-- [ ] 纹理图集:所有 Canvas 生成纹理合并为一张 atlas,减少 texture bind
+- [x] 房间静态几何合并(墙体+包边 16+ 网格 → 2 次 draw call)
+- [x] 敌人网格对象池(避免生成/销毁的 GC 与重新编译)
+- [x] Pixi `cacheAsTexture` 与纹理图集:评估后跳过(仅 4 张程序纹理,收益甚微)
 - [ ] 楼层生成移入 Web Worker(大地图生成不阻塞主线程)
 
 ## Phase 2 · 内容深度 (关卡与敌人)

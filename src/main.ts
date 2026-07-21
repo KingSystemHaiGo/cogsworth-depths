@@ -319,9 +319,8 @@ async function main(): Promise<void> {
     // 注意顺序:先更新相机(含跟随),再跑游戏逻辑。
     // 否则瞄准时用的是上一帧的相机矩阵,相机滑动时炮口和准星会有偏差
     stage.update(dt);
-    if (game.state === 'playing') {
-      game.update(dt, time);
-    }
+    // 无条件调用:update 内部自己处理状态,死亡动画在非战斗状态也要推进
+    game.update(dt, time);
     overlay.update(dt, input.mouseX, input.mouseY, input.mouseDown, game.hpRatio);
     stage.render(time);
     stats.end();

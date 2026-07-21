@@ -1,5 +1,6 @@
 // 程序化房间构建:地板/墙壁/门/蒸汽朋克装饰,全部由代码生成
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RNG } from '../core/rng.ts';
 import { CONFIG, PALETTE } from '../core/config.ts';
 import { toonMat, glowMat, toonGradient, makeBlobShadow } from './materials.ts';
@@ -118,17 +119,20 @@ export class Room {
     floor.rotation.x = -Math.PI / 2;
     this.group.add(floor);
 
-    // 四面墙(有门的一侧留缺口)
+    // 四面墙(有门的一侧留缺口)。几何先收集,最后按材质合并,
+    // 每面墙 2 个网格 → 全房间墙体只占 2 次 draw call
+    const wallGeos: THREE.BufferGeometry[] = [];
+    const trimGeos: THREE.BufferGeometry[] = [];
     const mkWall = (ww: number, x: number, z: number, rotY: number) => {
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(ww, wallH, 0.6), themedWall);
-      wall.position.set(x, wallH / 2, z);
-      wall.rotation.y = rotY;
-      this.group.add(wall);
+      const wg = new THREE.BoxGeometry(ww, wallH, 0.6);
+      wg.rotateY(rotY);
+      wg.translate(x, wallH / 2, z);
+      wallGeos.push(wg);
       // 顶部黄铜包边
-      const trim = new THREE.Mesh(new THREE.BoxGeometry(ww, 0.18, 0.7), brassMat);
-      trim.position.set(x, wallH + 0.09, z);
-      trim.rotation.y = rotY;
-      this.group.add(trim);
+      const tg = new THREE.BoxGeometry(ww, 0.18, 0.7);
+      tg.rotateY(rotY);
+      tg.translate(x, wallH + 0.09, z);
+      trimGeos.push(tg);
     };
     const seg = (total: number) => (total - doorGap) / 2;
     const off = (total: number) => doorGap / 2 + seg(total) / 2;
@@ -153,6 +157,9 @@ export class Room {
         this.doors.push(this.makeDoor(side, doorGap, wallH));
       }
     }
+    // 合并墙体与包边(各一次 draw call)
+    if (wallGeos.length > 0) this.group.add(new THREE.Mesh(mergeGeometries(wallGeos), themedWall));
+    if (trimGeos.length > 0) this.group.add(new THREE.Mesh(mergeGeometries(trimGeos), brassMat));
 
     this.decorate(rng, doorSides);
     this.placeObstacles(rng, doorSides);

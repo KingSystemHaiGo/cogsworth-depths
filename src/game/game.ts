@@ -101,12 +101,14 @@ export class Game {
   stats: PlayerStats = this.baseStats();
 
   private enemies: Enemy[] = [];
+  /** 敌人网格对象池:生成/死亡复用,避免 GC 与重复构造 */
+  private meshPool = new Map<EnemyKind, THREE.Group[]>();
   private pendingSpawns: { kind: EnemyKind; x: number; z: number; t: number }[] = [];
   private wavesTotal = 0;
   private wavesDone = 0;
   private waveSize = 0;
   private waveBreather = 0;
-  private dying: { mesh: THREE.Group; t: number }[] = [];
+  private dying: { mesh: THREE.Group; kind: EnemyKind; t: number }[] = [];
   private playerBullets: BulletPool;
   private enemyBullets: BulletPool;
   private drops: Drop[] = [];
@@ -213,10 +215,10 @@ export class Game {
     }
     // 清理旧房间
     if (this.room) this.stage.scene.remove(this.room.group);
-    for (const e of this.enemies) this.stage.scene.remove(e.mesh);
+    for (const e of this.enemies) this.releaseMesh(e.kind, e.mesh);
     this.enemies = [];
     this.pendingSpawns = [];
-    for (const d of this.dying) this.stage.scene.remove(d.mesh);
+    for (const d of this.dying) this.releaseMesh(d.kind, d.mesh);
     this.dying = [];
     for (const d of this.drops) this.stage.scene.remove(d.mesh);
     this.drops = [];
@@ -483,9 +485,8 @@ export class Game {
 
   private spawnEnemy(kind: EnemyKind, x: number, z: number, hpScale: number): void {
     const def = BALANCE.enemies[kind];
-    const mesh = makeEnemyMesh(kind);
+    const mesh = this.acquireMesh(kind);
     mesh.position.set(x, 0, z);
-    this.stage.scene.add(mesh);
     this.enemies.push({
       kind,
       mesh,
@@ -510,9 +511,52 @@ export class Game {
     });
   }
 
+  /** 从对象池取敌人网格(没有才新建),并重置所有可变状态 */
+  private acquireMesh(kind: EnemyKind): THREE.Group {
+    let pool = this.meshPool.get(kind);
+    if (!pool) {
+      pool = [];
+      this.meshPool.set(kind, pool);
+    }
+    const mesh = pool.pop() ?? makeEnemyMesh(kind);
+    // 重置变换与零件状态
+    mesh.scale.set(1, 1, 1);
+    mesh.rotation.set(0, 0, 0);
+    mesh.visible = true;
+    const laser = mesh.userData.laser as THREE.Mesh | undefined;
+    if (laser) laser.visible = false;
+    const core = mesh.userData.core as THREE.Mesh | undefined;
+    if (core) {
+      (core.material as THREE.MeshToonMaterial).emissiveIntensity = 2.5;
+      core.scale.setScalar(1);
+    }
+    const body = mesh.userData.body as THREE.Group | undefined;
+    if (body) body.scale.set(1, 1, 1);
+    this.stage.scene.add(mesh);
+    return mesh;
+  }
+
+  /** 回收敌人网格到对象池 */
+  private releaseMesh(kind: EnemyKind, mesh: THREE.Group): void {
+    this.stage.scene.remove(mesh);
+    this.meshPool.get(kind)!.push(mesh);
+  }
+
   // ---------- 主更新 ----------
 
   update(dt: number, time: number): void {
+    // 死亡爆散动画无条件推进(否则升级界面弹出时会冻结在半截,网格也不进池)
+    for (let i = this.dying.length - 1; i >= 0; i--) {
+      const d = this.dying[i];
+      d.t += dt;
+      const s = Math.max(0.01, 1 - d.t / 0.16);
+      d.mesh.scale.setScalar(s);
+      d.mesh.rotation.y += dt * 14;
+      if (d.t >= 0.16) {
+        this.releaseMesh(d.kind, d.mesh);
+        this.dying.splice(i, 1);
+      }
+    }
     if (this.state !== 'playing') return;
     this.timeSec += dt;
     if (this.room) this.room.update(dt, time);
@@ -596,19 +640,6 @@ export class Game {
         }
       } else {
         this.waveBreather = 0.9;
-      }
-    }
-
-    // 死亡爆散动画(缩小旋转消散)
-    for (let i = this.dying.length - 1; i >= 0; i--) {
-      const d = this.dying[i];
-      d.t += dt;
-      const s = Math.max(0.01, 1 - d.t / 0.16);
-      d.mesh.scale.setScalar(s);
-      d.mesh.rotation.y += dt * 14;
-      if (d.t >= 0.16) {
-        this.stage.scene.remove(d.mesh);
-        this.dying.splice(i, 1);
       }
     }
 
@@ -1361,7 +1392,7 @@ export class Game {
     // 击杀冲击波环 + 顿帧,爆发力核心
     this.overlay.ring(tmp.x, tmp.y, e.kind === 'boss' ? 0xffb347 : 0xffd980, e.kind === 'boss' ? 160 : 80);
     // 死亡爆散:交给 dying 队列做缩小旋转消散
-    this.dying.push({ mesh: e.mesh, t: 0 });
+    this.dying.push({ mesh: e.mesh, kind: e.kind, t: 0 });
     this.enemies.splice(idx, 1);
 
     // 分裂球死亡:裂成两只小蜘蛛
