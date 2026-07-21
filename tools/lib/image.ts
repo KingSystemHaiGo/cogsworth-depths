@@ -119,7 +119,8 @@ export function symmetryAxis(mask: Uint8Array, w: number, h: number, bb: { minX:
   return bestX;
 }
 
-/** 半轮廓采样:按 y 均匀取 n 个点,返回 LatheGeometry 需要的 (半径, 高度) 坐标
+/** 半轮廓采样:按 y 均匀取 n 个点,返回 LatheGeometry 需要的 (半径, 高度) 坐标。
+ *  半径取左右两侧均值(比取最大值更能抗边缘噪声,曲线更顺滑)。
  *  输出以底部为 y=0、最大半径为 1 归一化 */
 export function sampleProfile(
   mask: Uint8Array,
@@ -127,11 +128,10 @@ export function sampleProfile(
   h: number,
   bb: { minX: number; maxX: number; minY: number; maxY: number },
   axisX: number,
-  n = 20,
+  n = 48,
 ): { r: number; y: number }[] {
-  const pts: { r: number; y: number }[] = [];
-  let maxR = 1;
   const raw: { r: number; y: number }[] = [];
+  let maxR = 1;
   for (let i = 0; i < n; i++) {
     const y = Math.round(bb.maxY - (i / (n - 1)) * (bb.maxY - bb.minY)); // 从底到顶
     let left = -1, right = -1;
@@ -142,12 +142,12 @@ export function sampleProfile(
       }
     }
     if (left < 0) continue;
-    const r = Math.max(axisX - left, right - axisX);
+    // 左右半径均值:抗锯齿边缘的单像素毛刺会被平掉
+    const r = ((axisX - left) + (right - axisX)) / 2;
     raw.push({ r, y: i / (n - 1) });
     if (r > maxR) maxR = r;
   }
-  for (const p of raw) pts.push({ r: p.r / maxR, y: p.y });
-  return pts;
+  return raw.map((p) => ({ r: p.r / maxR, y: p.y }));
 }
 
 /** Douglas-Peucker 曲线简化(极坐标展开到 r-y 平面) */

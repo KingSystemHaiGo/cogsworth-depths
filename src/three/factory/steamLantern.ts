@@ -1,3 +1,4 @@
+// eslint-disable-next-line
 // 由 tools/img2lathe.mjs 从参考图生成:tools/refs/lantern.png
 import * as THREE from 'three';
 import { toonMat, addOutlines, makeBlobShadow } from '../materials.ts';
@@ -6,17 +7,20 @@ import { toonMat, addOutlines, makeBlobShadow } from '../materials.ts';
 export function makeSteamLantern(): THREE.Group {
   const g = new THREE.Group();
   const profile = [
-    new THREE.Vector2(0.675, 0.000),
-    new THREE.Vector2(0.675, 0.070),
-    new THREE.Vector2(0.521, 0.209),
-    new THREE.Vector2(0.521, 0.835),
-    new THREE.Vector2(0.800, 0.974),
-    new THREE.Vector2(0.312, 1.183),
-    new THREE.Vector2(0.376, 1.322),
-    new THREE.Vector2(0.336, 1.461),
-    new THREE.Vector2(0.042, 1.600),
+    new THREE.Vector2(0.649, 0.000),
+    new THREE.Vector2(0.649, 0.127),
+    new THREE.Vector2(0.498, 0.203),
+    new THREE.Vector2(0.498, 0.863),
+    new THREE.Vector2(0.800, 0.965),
+    new THREE.Vector2(0.290, 1.194),
+    new THREE.Vector2(0.333, 1.244),
+    new THREE.Vector2(0.359, 1.321),
+    new THREE.Vector2(0.354, 1.397),
+    new THREE.Vector2(0.331, 1.448),
+    new THREE.Vector2(0.218, 1.549),
+    new THREE.Vector2(0.041, 1.600),
   ];
-  const body = new THREE.Mesh(new THREE.LatheGeometry(profile, 16), toonMat(0xb08d57));
+  const body = new THREE.Mesh(new THREE.LatheGeometry(profile, 24), toonMat(0xb08d57));
   g.add(body);
   addOutlines(g);
   g.add(makeBlobShadow(0.80));

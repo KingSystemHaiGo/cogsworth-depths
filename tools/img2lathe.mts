@@ -11,7 +11,7 @@ import {
   dominantColors,
 } from './lib/image.ts';
 
-const [,, imgPath, name = 'customProp', height = '2'] = process.argv;
+const [,, imgPath, name = 'customProp', height = '2', samples = '64', epsilon = '0.012', segments = '24'] = process.argv;
 if (!imgPath) {
   console.error('用法: node tools/img2lathe.mjs <图片> [名称] [高度]');
   process.exit(1);
@@ -31,8 +31,8 @@ const axis = symmetryAxis(mask, rgba.width, rgba.height, bb);
 console.error(`对称轴 x=${axis.toFixed(1)}`);
 
 // 3. 半轮廓采样 + 简化 → 三维坐标(半径,高度)
-const raw = sampleProfile(mask, rgba.width, rgba.height, bb, axis, 24);
-const profile = simplifyProfile(raw, 0.035);
+const raw = sampleProfile(mask, rgba.width, rgba.height, bb, axis, Number(samples));
+const profile = simplifyProfile(raw, Number(epsilon));
 console.error(`轮廓点: ${raw.length} → 简化后 ${profile.length}`);
 
 // 4. 主导色
@@ -41,7 +41,8 @@ const hex = (c: number[]): string => `0x${c.map((v) => v.toString(16).padStart(2
 
 // 5. 生成 TS 工厂代码
 const vec2 = profile.map((p) => `    new THREE.Vector2(${(p.r * (H / 2)).toFixed(3)}, ${(p.y * H).toFixed(3)}),`).join('\n');
-const code = `// 由 tools/img2lathe.mjs 从参考图生成:${imgPath}
+const code = `// eslint-disable-next-line
+// 由 tools/img2lathe.mjs 从参考图生成:${imgPath}
 import * as THREE from 'three';
 import { toonMat, addOutlines, makeBlobShadow } from '../materials.ts';
 
@@ -51,7 +52,7 @@ export function make${name[0].toUpperCase() + name.slice(1)}(): THREE.Group {
   const profile = [
 ${vec2}
   ];
-  const body = new THREE.Mesh(new THREE.LatheGeometry(profile, 16), toonMat(${hex(colors[0])}));
+  const body = new THREE.Mesh(new THREE.LatheGeometry(profile, ${segments}), toonMat(${hex(colors[0])}));
   g.add(body);
   addOutlines(g);
   g.add(makeBlobShadow(${(H / 2).toFixed(2)}));
