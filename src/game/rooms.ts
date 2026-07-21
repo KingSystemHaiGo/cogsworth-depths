@@ -6,7 +6,7 @@ export interface RoomNode {
   id: number;
   gx: number;
   gy: number;
-  kind: 'start' | 'normal' | 'boss' | 'treasure' | 'shop';
+  kind: 'start' | 'normal' | 'boss' | 'treasure' | 'shop' | 'challenge';
   /** 邻居房间 id(生成后填充) */
   links: Partial<Record<DoorSide, number>>;
   cleared: boolean;
@@ -67,6 +67,8 @@ export function generateFloor(rng: RNG, roomCount: number): Floor {
   // 支线挂一个宝箱房和一个商店(挂在随机普通房的空方向上)
   attachSpecial(rng, rooms, byPos, 'treasure');
   attachSpecial(rng, rooms, byPos, 'shop');
+  // 2 层起挂一个挑战房
+  if (roomCount > 5) attachSpecial(rng, rooms, byPos, 'challenge');
 
   // 精英房间:2 层起 30% 普通房带词缀
   if (roomCount > 5) {

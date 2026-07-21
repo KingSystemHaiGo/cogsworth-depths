@@ -108,6 +108,7 @@ export class Game {
   private meshPool = new Map<EnemyKind, THREE.Group[]>();
   private pendingSpawns: { kind: EnemyKind; x: number; z: number; t: number; affix: Enemy['affix'] }[] = [];
   private wavesTotal = 0;
+  private challengeTimer = -1;
   private wavesDone = 0;
   private waveSize = 0;
   private waveBreather = 0;
@@ -257,7 +258,13 @@ export class Game {
     }
 
     // 只有战斗房和 Boss 房生成波次;宝箱/商店不生成怪物,也不该有预警
-    if (!node.cleared && (node.kind === 'normal' || node.kind === 'boss')) this.startWaves(node);
+    if (!node.cleared && (node.kind === 'normal' || node.kind === 'boss' || node.kind === 'challenge')) {
+      this.startWaves(node);
+      if (node.kind === 'challenge') {
+        this.challengeTimer = BALANCE.challenge.time;
+        this.overlay.banner(t('room.challenge'), t('challenge.intro'), 0xffb347);
+      }
+    }
     // Boss 房只在未清时亮血条和战歌(清空后再进不应触发)
     if (node.kind === 'boss' && !node.cleared) {
       this.overlay.setBossHp(this.bossName(this.bossKindForFloor()), 1);
@@ -622,6 +629,21 @@ export class Game {
       1 - Math.max(0, this.rollCd) / (BALANCE.player.rollCd * this.cdMult()),
     );
 
+    // 挑战房倒计时
+    if (this.challengeTimer > 0 && this.currentNode && !this.currentNode.cleared) {
+      this.challengeTimer -= dt;
+      if (this.challengeTimer <= 0) {
+        // 超时:敌人散去,无奖励
+        for (const e of this.enemies) this.releaseMesh(e.kind, e.mesh);
+        this.enemies = [];
+        this.pendingSpawns = [];
+        this.currentNode.cleared = true;
+        this.room!.setAllDoors(true);
+        this.overlay.banner(t('challenge.fail'), undefined, 0x9a8a68);
+        this.overlay.hideBossHp();
+      }
+    }
+
     // 房间清除判定:场上无敌人且无待生成才算
     if (this.currentNode && !this.currentNode.cleared) {
       // 待生成队列:预警圈结束后敌人才现身
@@ -661,7 +683,10 @@ export class Game {
 
   /** HUD 房间标签:战斗中显示波次进度 */
   private hudRoomLabel(node: RoomNode): string {
-    if (!node.cleared && node.kind === 'normal' && this.wavesTotal > 1) {
+    if (!node.cleared && node.kind === 'challenge' && this.challengeTimer > 0) {
+      return t('challenge.countdown', { n: Math.ceil(this.challengeTimer) });
+    }
+    if (!node.cleared && (node.kind === 'normal' || node.kind === 'challenge') && this.wavesTotal > 1) {
       return t('hud.wave', { a: Math.min(this.wavesDone, this.wavesTotal), b: this.wavesTotal });
     }
     return roomLabel(node);
@@ -1811,6 +1836,11 @@ export class Game {
       return;
     }
 
+    // 挑战房限时内清空:额外奖励
+    if (node.kind === 'challenge' && this.challengeTimer > 0) {
+      this.cogs += BALANCE.challenge.cogs;
+      this.overlay.banner(t('challenge.success'), undefined, 0xe8c877);
+    }
     // 普通房间:三选一升级(Pixi 原生界面)
     this.offerUpgrade();
   }
@@ -1976,5 +2006,6 @@ function roomLabel(node: RoomNode): string {
   if (node.kind === 'boss') return t('room.boss');
   if (node.kind === 'treasure') return t('room.treasure');
   if (node.kind === 'shop') return t('room.shop');
+  if (node.kind === 'challenge') return t('room.challenge');
   return node.cleared ? t('room.cleared') : t('room.combat');
 }

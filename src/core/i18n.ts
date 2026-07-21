@@ -75,6 +75,11 @@ const TEXTS = {
   'elite.splitting': { zh: '分裂精英房!', en: 'SPLITTING ELITES!' },
   'elite.shielded': { zh: '坚盾精英房!', en: 'SHIELDED ELITES!' },
   'room.elite': { zh: '精英房', en: 'Elite room' },
+  'room.challenge': { zh: '挑战房', en: 'Challenge room' },
+  'challenge.intro': { zh: '限时清版!', en: 'Timed clear!' },
+  'challenge.success': { zh: '挑战成功!', en: 'CHALLENGE COMPLETE!' },
+  'challenge.fail': { zh: '超时,锅炉泄压……', en: 'Time up. Pressure lost...' },
+  'challenge.countdown': { zh: '限时 {n}s', en: '{n}s left' },
 
   // 剧情:每层的名字与医生日志
   'floor.1': { zh: '雾都下水道', en: 'Fog City Sewers' },

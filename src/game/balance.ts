@@ -96,4 +96,9 @@ export const BALANCE = {
   combo: {
     window: 3,
   },
+
+  challenge: {
+    time: 25, // 限时清版秒数
+    cogs: 5, // 成功奖励齿轮币
+  },
 } as const;
