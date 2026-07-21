@@ -8,6 +8,7 @@ import { Room, DoorSide } from '../three/room.ts';
 import { makePlayerMesh, makeEnemyMesh, EnemyKind } from '../three/actors.ts';
 import { makeGear } from '../three/factory/gears.ts';
 import { SteamVent } from '../three/factory/steam.ts';
+import { BulletPool, Bullet } from '../three/bulletPool.ts';
 import { generateFloor, Floor, RoomNode } from './rooms.ts';
 import { BALANCE } from './balance.ts';
 import { t, lt } from '../core/i18n.ts';
@@ -40,20 +41,6 @@ interface Enemy {
   enraged: boolean; // boss 二阶段
   spawnT: number; // 出生入场动画剩余时间
   hitPop: number; // 受击挤压脉冲 0..1
-}
-
-interface Bullet {
-  mesh: THREE.Mesh;
-  active: boolean;
-  x: number;
-  z: number;
-  vx: number;
-  vz: number;
-  dmg: number;
-  life: number;
-  pierce: number;
-  bounce: number; // 剩余弹射次数
-  r: number;
 }
 
 interface Drop {
@@ -120,8 +107,8 @@ export class Game {
   private waveSize = 0;
   private waveBreather = 0;
   private dying: { mesh: THREE.Group; t: number }[] = [];
-  private playerBullets: Bullet[] = [];
-  private enemyBullets: Bullet[] = [];
+  private playerBullets: BulletPool;
+  private enemyBullets: BulletPool;
   private drops: Drop[] = [];
   private pets: Pet[] = [];
   private petTick = 0;
@@ -151,23 +138,9 @@ export class Game {
     private input: Input,
     private onGameOver: () => void,
   ) {
-    // 子弹池
-    const pGeo = new THREE.SphereGeometry(0.14, 8, 6);
-    const pMat = new THREE.MeshBasicMaterial({ color: PALETTE.playerBullet });
-    const eGeo = new THREE.SphereGeometry(0.17, 8, 6);
-    const eMat = new THREE.MeshBasicMaterial({ color: PALETTE.enemyBullet });
-    for (let i = 0; i < 128; i++) {
-      const m = new THREE.Mesh(pGeo, pMat);
-      m.visible = false;
-      stage.scene.add(m);
-      this.playerBullets.push({ mesh: m, active: false, x: 0, z: 0, vx: 0, vz: 0, dmg: 0, life: 0, pierce: 0, bounce: 0, r: 0.18 });
-    }
-    for (let i = 0; i < 256; i++) {
-      const m = new THREE.Mesh(eGeo, eMat);
-      m.visible = false;
-      stage.scene.add(m);
-      this.enemyBullets.push({ mesh: m, active: false, x: 0, z: 0, vx: 0, vz: 0, dmg: 0, life: 0, pierce: 0, bounce: 0, r: 0.2 });
-    }
+    // 子弹池:实例化渲染,双方子弹各 1 次 draw call
+    this.playerBullets = new BulletPool(stage.scene, PALETTE.playerBullet, 0.14, 128);
+    this.enemyBullets = new BulletPool(stage.scene, PALETTE.enemyBullet, 0.17, 256);
   }
 
   private baseStats(): PlayerStats {
@@ -551,11 +524,13 @@ export class Game {
     for (let s = 0; s < steps; s++) {
       this.updatePlayer(sdt);
       this.updateEnemies(sdt, time);
-      this.updateBullets(sdt, this.playerBullets, true);
-      this.updateBullets(sdt, this.enemyBullets, false);
+      this.updateBullets(sdt, this.playerBullets.items, true);
+      this.updateBullets(sdt, this.enemyBullets.items, false);
       this.updateDrops(sdt, time);
       this.updateShells(sdt);
     }
+    this.playerBullets.sync();
+    this.enemyBullets.sync();
     this.checkDoors();
     this.updateCameraTarget();
 
@@ -807,7 +782,7 @@ export class Game {
       const sin = Math.sin(offset);
       const dx = p.aimX * cos - p.aimZ * sin;
       const dz = p.aimX * sin + p.aimZ * cos;
-      const b = this.playerBullets.find((bb) => !bb.active);
+      const b = this.playerBullets.findFree();
       if (!b) return;
       const crit = Math.random() < 0.1;
       b.active = true;
@@ -819,9 +794,8 @@ export class Game {
       b.life = CONFIG.bulletLife;
       b.pierce = this.stats.pierce;
       b.bounce = this.stats.bounce;
-      b.mesh.visible = true;
-      b.mesh.scale.setScalar(this.stats.bulletScale * (crit ? 1.6 : 1));
-      b.mesh.userData.crit = crit;
+      b.scale = this.stats.bulletScale * (crit ? 1.6 : 1);
+      b.crit = crit;
     }
     // 枪口火花 + 准星回弹
     this.overlay.crosshairFireKick();
@@ -1249,7 +1223,6 @@ export class Game {
       b.x += b.vx * dt;
       b.z += b.vz * dt;
       b.life -= dt;
-      b.mesh.position.set(b.x, 0.8, b.z);
 
       // 墙面弹射(玩家子弹)
       if (friendly && b.bounce >= 0) {
@@ -1303,7 +1276,7 @@ export class Game {
                 break;
               }
             }
-            this.damageEnemy(i, b.dmg, b.mesh.userData.crit === true, b.vx, b.vz);
+            this.damageEnemy(i, b.dmg, b.crit, b.vx, b.vz);
             if (b.pierce > 0) {
               b.pierce--;
             } else {
@@ -1325,7 +1298,6 @@ export class Game {
         this.worldToScreen(b.x, b.z, tmp);
         this.overlay.sparkBurst(tmp.x, tmp.y, friendly ? 0xffd980 : 0xff5544, 4);
         b.active = false;
-        b.mesh.visible = false;
       }
     }
   }
@@ -1335,7 +1307,7 @@ export class Game {
   }
 
   private fireEnemyBullet(x: number, z: number, vx: number, vz: number, dmg: number): void {
-    const b = this.enemyBullets.find((bb) => !bb.active);
+    const b = this.enemyBullets.findFree();
     if (!b) return;
     b.active = true;
     b.x = x;
@@ -1344,7 +1316,6 @@ export class Game {
     b.vz = vz;
     b.dmg = dmg;
     b.life = 3.5;
-    b.mesh.visible = true;
   }
 
   private damageEnemy(idx: number, dmg: number, crit: boolean, dirX = 0, dirZ = 0): void {
@@ -1572,10 +1543,9 @@ export class Game {
         }
       }
       // 挡下敌弹
-      for (const b of this.enemyBullets) {
+      for (const b of this.enemyBullets.items) {
         if (b.active && Math.hypot(b.x - px, b.z - pz) < BALANCE.pet.blockRadius) {
           b.active = false;
-          b.mesh.visible = false;
           const tmp = { x: 0, y: 0 };
           this.worldToScreen(px, pz, tmp);
           this.overlay.sparkBurst(tmp.x, tmp.y, 0xe8c877, 5);
@@ -1857,10 +1827,8 @@ export class Game {
   }
 
   private clearBullets(): void {
-    for (const b of [...this.playerBullets, ...this.enemyBullets]) {
-      b.active = false;
-      b.mesh.visible = false;
-    }
+    this.playerBullets.clear();
+    this.enemyBullets.clear();
   }
 
   togglePause(): boolean {

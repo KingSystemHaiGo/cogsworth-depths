@@ -1,5 +1,5 @@
 // PixiJS 叠加层:屏幕准星 / 打击数字 / 火花 / 冲击波 / 屏幕反馈 / HUD
-import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { Application, Container, Graphics, Text, TextStyle, Texture, ParticleContainer, Particle } from 'pixi.js';
 import { UpgradeScreen } from './upgradeScreen.ts';
 import type { Upgrade } from '../game/upgrades.ts';
 import { t } from '../core/i18n.ts';
@@ -16,13 +16,26 @@ interface DamageNumber {
 }
 
 interface Spark {
-  gfx: Graphics;
-  x: number;
-  y: number;
+  p: Particle;
   vx: number;
   vy: number;
   life: number;
   maxLife: number;
+}
+
+/** 代码生成火花纹理(粒子共享,一次上传 GPU) */
+function makeSparkTexture(): Texture {
+  const size = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.6, 'rgba(255,255,255,0.7)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  return Texture.from(canvas);
 }
 
 interface Ring {
@@ -58,6 +71,8 @@ export class Overlay {
   private hudLayer = new Container();
   private damageNumbers: DamageNumber[] = [];
   private sparks: Spark[] = [];
+  private sparkContainer!: ParticleContainer;
+  private sparkTex = makeSparkTexture();
   private rings: Ring[] = [];
   private banners: Banner[] = [];
   private flashGfx = new Graphics();
@@ -122,6 +137,11 @@ export class Overlay {
     this.app.stage.addChild(this.fxLayer);
     this.app.stage.addChild(this.hudLayer);
     this.app.stage.addChild(this.flashGfx);
+    // 火花粒子容器:单次 draw call 渲染全部火花(ParticleContainer 十万级性能)
+    this.sparkContainer = new ParticleContainer({
+      dynamicProperties: { position: true, vertex: true, rotation: false, uvs: false, color: true },
+    });
+    this.fxLayer.addChild(this.sparkContainer);
 
     this.hpText = new Text({
       text: '',
@@ -308,20 +328,22 @@ export class Overlay {
     });
   }
 
-  /** 屏幕坐标火花迸溅 */
+  /** 屏幕坐标火花迸溅(ParticleContainer 粒子,一次 draw call) */
   sparkBurst(sx: number, sy: number, color: number, count = 10): void {
     for (let i = 0; i < count; i++) {
-      const gfx = new Graphics();
-      const r = 2 + Math.random() * 3;
-      gfx.circle(0, 0, r).fill(color);
-      gfx.blendMode = 'add';
       const a = Math.random() * Math.PI * 2;
       const sp = 60 + Math.random() * 260;
-      this.fxLayer.addChild(gfx);
-      this.sparks.push({
-        gfx,
+      const p = new Particle({
+        texture: this.sparkTex,
         x: sx,
         y: sy,
+        tint: color,
+        scaleX: 0.5 + Math.random() * 0.8,
+        scaleY: 0.5 + Math.random() * 0.8,
+      });
+      this.sparkContainer.addParticle(p);
+      this.sparks.push({
+        p,
         vx: Math.cos(a) * sp,
         vy: Math.sin(a) * sp,
         life: 0.35 + Math.random() * 0.3,
@@ -548,7 +570,10 @@ export class Overlay {
 
   clearFx(): void {
     for (const d of this.damageNumbers) d.text.destroy();
-    for (const s of this.sparks) s.gfx.destroy();
+    for (const s of this.sparks) {
+      this.sparkContainer.removeParticle(s.p);
+
+    }
     for (const r of this.rings) r.gfx.destroy();
     for (const b of this.banners) b.text.destroy();
     this.damageNumbers.length = 0;
@@ -621,15 +646,15 @@ export class Overlay {
       const s = this.sparks[i];
       s.life -= dt;
       if (s.life <= 0) {
-        s.gfx.destroy();
+        this.sparkContainer.removeParticle(s.p);
+  
         this.sparks.splice(i, 1);
         continue;
       }
-      s.x += s.vx * dt;
-      s.y += s.vy * dt;
+      s.p.x += s.vx * dt;
+      s.p.y += s.vy * dt;
       s.vy += 340 * dt;
-      s.gfx.position.set(s.x, s.y);
-      s.gfx.alpha = s.life / s.maxLife;
+      s.p.alpha = s.life / s.maxLife;
     }
 
     // 冲击波环
