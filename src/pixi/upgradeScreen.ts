@@ -1,6 +1,7 @@
 // Pixi 原生升级三选一界面:黄铜卡片 + 入场回弹 + 悬停发光,与 HUD 同一渲染层
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import type { Upgrade } from '../game/upgrades.ts';
+import { lt, t } from '../core/i18n.ts';
 
 interface Card {
   root: Container;
@@ -60,7 +61,7 @@ export class UpgradeScreen {
 
     // 标题
     const title = new Text({
-      text: '房 间 清 除',
+      text: t('upgrade.title'),
       style: new TextStyle({
         fontFamily: 'Georgia, serif',
         fontSize: 40,
@@ -74,7 +75,7 @@ export class UpgradeScreen {
     title.position.set(W / 2, H / 2 - 190);
     this.root.addChild(title);
     const sub = new Text({
-      text: '— 选 择 一 项 改 装 —',
+      text: t('upgrade.subtitle'),
       style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 15, fill: 0x9a8a68, letterSpacing: 4 }),
     });
     sub.anchor.set(0.5);
@@ -142,13 +143,13 @@ export class UpgradeScreen {
     icon.anchor.set(0.5);
     icon.position.set(w / 2, 58);
     const name = new Text({
-      text: u.name,
+      text: lt(u.name),
       style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 19, fontWeight: 'bold', fill: BRASS_LIGHT, letterSpacing: 2 }),
     });
     name.anchor.set(0.5, 0);
     name.position.set(w / 2, 100);
     const desc = new Text({
-      text: u.desc,
+      text: lt(u.desc),
       style: new TextStyle({
         fontFamily: 'Georgia, serif',
         fontSize: 13,

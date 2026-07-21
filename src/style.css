@@ -189,6 +189,76 @@ html, body {
 }
 
 /* --- 升级卡片 --- */
+/* --- 设置页 --- */
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 14px 0;
+  text-align: left;
+}
+
+.setting-row label {
+  width: 130px;
+  font-size: 15px;
+  color: var(--text);
+  letter-spacing: 1px;
+}
+
+.setting-row span {
+  width: 36px;
+  font-size: 15px;
+  color: var(--brass-light);
+  text-align: right;
+}
+
+.setting-row input[type='range'] {
+  flex: 1;
+  appearance: none;
+  height: 6px;
+  background: #0c1116;
+  border: 1px solid var(--brass-dim);
+  border-radius: 3px;
+  outline: none;
+  pointer-events: auto;
+}
+
+.setting-row input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #f0d68a, var(--brass));
+  border: 1px solid #5a4a2c;
+  cursor: pointer;
+}
+
+.lang-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.screen .btn-sub {
+  padding: 8px 20px;
+  font-size: 14px;
+  background: linear-gradient(180deg, #2a3440, #1a2129);
+  color: var(--text);
+  text-shadow: none;
+  border: 1px solid var(--brass-dim);
+  box-shadow: 0 2px 0 #10151b, 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.screen .btn-sub:hover {
+  filter: brightness(1.2);
+  box-shadow: 0 2px 0 #10151b, 0 4px 14px rgba(232, 200, 119, 0.2);
+}
+
+.screen .btn-sub.active {
+  background: linear-gradient(180deg, #f0d68a, var(--brass));
+  color: #1a1408;
+  border-color: #5a4a2c;
+}
+
 .upgrade-cards {
   display: flex;
   gap: 22px;

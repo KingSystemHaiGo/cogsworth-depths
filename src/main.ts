@@ -11,11 +11,32 @@ import { Overlay } from './pixi/overlay.ts';
 import { Game } from './game/game.ts';
 import { synth } from './audio/synth.ts';
 import { music } from './audio/music.ts';
-import { showTitle, showPause, showGameOver } from './ui/screens.ts';
+import { showTitle, showPause, showGameOver, showSettings, SettingsValues } from './ui/screens.ts';
+
+const VOL_KEY = 'cogsworth-volumes';
+
+function loadVolumes(): SettingsValues {
+  try {
+    const raw = localStorage.getItem(VOL_KEY);
+    if (raw) return JSON.parse(raw) as SettingsValues;
+  } catch {
+    /* 忽略 */
+  }
+  return { musicVolume: CONFIG.musicVolume, sfxVolume: CONFIG.masterVolume };
+}
+
+function saveVolumes(v: SettingsValues): void {
+  localStorage.setItem(VOL_KEY, JSON.stringify(v));
+}
 
 async function main(): Promise<void> {
   const threeCanvas = document.getElementById('three-canvas') as HTMLCanvasElement;
   const pixiCanvas = document.getElementById('pixi-canvas') as HTMLCanvasElement;
+
+  // 读取持久化的音量设置
+  const volumes = loadVolumes();
+  CONFIG.musicVolume = volumes.musicVolume;
+  CONFIG.masterVolume = volumes.sfxVolume;
 
   const stage = new ThreeStage(threeCanvas);
   const overlay = new Overlay();
@@ -38,6 +59,19 @@ async function main(): Promise<void> {
   (window as unknown as { __game: Game }).__game = game;
   (window as unknown as { __cfg: typeof CONFIG }).__cfg = CONFIG;
 
+  function applyVolumes(v: SettingsValues): void {
+    Object.assign(volumes, v);
+    CONFIG.musicVolume = v.musicVolume;
+    CONFIG.masterVolume = v.sfxVolume;
+    synth.setVolume(v.sfxVolume);
+    music.setVolume(v.musicVolume);
+    saveVolumes(v);
+  }
+
+  function openSettings(onBack: () => void): void {
+    showSettings({ ...volumes }, applyVolumes, onBack);
+  }
+
   function restart(): void {
     overlay.clearFx();
     game.start(game.seed || randomSeed());
@@ -45,25 +79,36 @@ async function main(): Promise<void> {
     music.start();
   }
 
-  // 标题界面
-  showTitle(randomSeed(), (seed) => {
-    synth.init();
-    const ctx = synth.audioContext;
-    const bus = synth.inputBus;
-    if (ctx && bus) music.init(ctx, bus);
-    synth.startAmbient();
-    game.start(seed);
-    input.requestLock();
-    music.start();
-  });
+  // 标题界面(可重入:设置返回后再次显示)
+  function showTitleScreen(): void {
+    showTitle(
+      randomSeed(),
+      (seed) => {
+        synth.init();
+        const ctx = synth.audioContext;
+        const bus = synth.inputBus;
+        if (ctx && bus) music.init(ctx, bus);
+        applyVolumes(volumes); // 音频上下文就绪后应用一次
+        synth.startAmbient();
+        game.start(seed);
+        input.requestLock();
+        music.start();
+      },
+      () => openSettings(showTitleScreen),
+    );
+  }
+  showTitleScreen();
 
   // 暂停(Esc 或鼠标锁丢失时触发——锁定下按 Esc 浏览器会直接解锁,收不到按键)
   let pauseOpen = false;
   function openPause(): void {
-    if (game.state !== 'playing' || pauseOpen) return;
-    game.state = 'paused';
+    // 允许从暂停或游戏中进入(后者用于设置页返回时重绘)
+    if (game.state !== 'playing' && game.state !== 'paused') return;
+    if (game.state === 'playing') {
+      game.state = 'paused';
+      input.exitLock();
+    }
     pauseOpen = true;
-    input.exitLock();
     showPause(
       () => {
         game.state = 'playing';
@@ -74,6 +119,7 @@ async function main(): Promise<void> {
         pauseOpen = false;
         restart();
       },
+      () => openSettings(openPause),
     );
   }
   window.addEventListener('keydown', (e) => {

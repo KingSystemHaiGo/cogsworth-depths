@@ -9,6 +9,7 @@ import { makePlayerMesh, makeEnemyMesh, EnemyKind } from '../three/actors.ts';
 import { makeGear } from '../three/factory/gears.ts';
 import { generateFloor, Floor, RoomNode } from './rooms.ts';
 import { BALANCE } from './balance.ts';
+import { t, lt } from '../core/i18n.ts';
 import { PlayerStats, Upgrade, drawUpgrades } from './upgrades.ts';
 import { Overlay } from '../pixi/overlay.ts';
 import { synth } from '../audio/synth.ts';
@@ -234,7 +235,7 @@ export class Game {
     }
 
     if (!node.cleared) this.spawnEnemies(node);
-    if (node.kind === 'boss') this.overlay.setBossHp('锅炉魔像 · 柯格斯沃斯', 1);
+    if (node.kind === 'boss') this.overlay.setBossHp(t('boss.name'), 1);
     // 特殊房间:宝箱/商店,无敌人,门常开
     if (node.kind === 'treasure' || node.kind === 'shop') {
       node.cleared = true;
@@ -256,35 +257,35 @@ export class Game {
         r: 1.5,
         kind: 'chest',
         cost: 0,
-        label: '改装宝箱',
+        label: t('shop.chest'),
         mesh,
         used: false,
         effect: () => this.offerUpgrade(),
       });
-      this.overlay.floatText(0, -1.6, '⚙ 改装宝箱', 0xe8c877);
+      this.overlay.floatText(0, -1.6, t('shop.chest'), 0xe8c877);
       return;
     }
     // 商店:三个台座
     const items: { x: number; cost: number; label: string; color: number; effect: () => void }[] = [
-      { x: -5, cost: BALANCE.shop.heal.cost, label: `回复 ${BALANCE.shop.heal.amount} 生命`, color: 0x7ec86a, effect: () => this.heal(BALANCE.shop.heal.amount) },
+      { x: -5, cost: BALANCE.shop.heal.cost, label: t('shop.heal', { n: BALANCE.shop.heal.amount }), color: 0x7ec86a, effect: () => this.heal(BALANCE.shop.heal.amount) },
       {
         x: 0,
         cost: BALANCE.shop.upgrade.cost,
-        label: '随机改装',
+        label: t('shop.upgrade'),
         color: 0xe8c877,
         effect: () => {
           const opts = drawUpgrades(1, (arr) => this.rng.pick(arr), this.upgradeCounts);
           if (opts.length > 0) {
             opts[0].apply(this.stats, (n) => this.heal(n));
             this.upgradeCounts.set(opts[0].id, (this.upgradeCounts.get(opts[0].id) ?? 0) + 1);
-            this.overlay.floatText(0, -3, `获得:${opts[0].name}`, 0xe8c877);
+            this.overlay.floatText(0, -3, t('shop.got', { n: lt(opts[0].name) }), 0xe8c877);
           }
         },
       },
       {
         x: 5,
         cost: BALANCE.shop.maxHp.cost,
-        label: '生命上限 +15',
+        label: t('shop.maxHp', { n: BALANCE.shop.maxHp.amount }),
         color: 0x9fb4c0,
         effect: () => {
           this.stats.maxHp += BALANCE.shop.maxHp.amount;
@@ -881,7 +882,7 @@ export class Game {
     }
 
     if (this.currentNode) {
-      this.overlay.setBossHp('锅炉魔像 · 柯格斯沃斯', e.hp / e.maxHp);
+      this.overlay.setBossHp(t('boss.name'), e.hp / e.maxHp);
     }
   }
 
@@ -1164,7 +1165,7 @@ export class Game {
   private cantAffordHint(it: Interactive): void {
     if (this.affordWarned.has(it)) return;
     this.affordWarned.add(it);
-    this.overlay.floatText(it.x, it.z, '齿轮币不足', 0xd85a4a);
+    this.overlay.floatText(it.x, it.z, t('shop.noCogs'), 0xd85a4a);
   }
 
   private spawnDrop(x: number, z: number, kind: 'heart' | 'cog' = 'heart'): void {
@@ -1360,9 +1361,9 @@ export class Game {
 }
 
 function roomLabel(node: RoomNode): string {
-  if (node.kind === 'start') return '出发大厅';
-  if (node.kind === 'boss') return 'Boss 房';
-  if (node.kind === 'treasure') return '宝箱房';
-  if (node.kind === 'shop') return '齿轮商店';
-  return node.cleared ? '已清除的房间' : '战斗中!';
+  if (node.kind === 'start') return t('room.start');
+  if (node.kind === 'boss') return t('room.boss');
+  if (node.kind === 'treasure') return t('room.treasure');
+  if (node.kind === 'shop') return t('room.shop');
+  return node.cleared ? t('room.cleared') : t('room.combat');
 }

@@ -1,5 +1,5 @@
-// DOM 界面层:标题 / 暂停 / 升级三选一 / 结算
-import type { Upgrade } from '../game/upgrades.ts';
+// DOM 界面层:标题 / 暂停 / 设置 / 结算(全部双语)
+import { t, getLang, setLang, Lang } from '../core/i18n.ts';
 
 const layer = () => document.getElementById('ui-layer')!;
 
@@ -9,20 +9,21 @@ function el(html: string): HTMLElement {
   return div.firstElementChild as HTMLElement;
 }
 
-export function showTitle(defaultSeed: string, onStart: (seed: string) => void): void {
+export function showTitle(
+  defaultSeed: string,
+  onStart: (seed: string) => void,
+  onSettings: () => void,
+): void {
   const screen = el(`
     <div class="screen">
       <h1>COGSWORTH DEPTHS</h1>
-      <h2>蒸 汽 深 渊 · 程 序 化 肉 鸽</h2>
-      <p class="stats-line">
-        WASD / 方向键 移动 · 鼠标瞄准 · 左键射击<br/>
-        空格 冲刺 · Shift 翻滚 · Esc 暂停<br/>
-        清除每个房间的机械守卫,深入锅炉之心
-      </p>
+      <h2>${t('game.subtitle')}</h2>
+      <p class="stats-line">${t('game.controls')}</p>
       <div class="seed-row">
-        种子 <input id="seed-input" type="text" value="${defaultSeed}" maxlength="12"/>
+        ${t('game.seed')} <input id="seed-input" type="text" value="${defaultSeed}" maxlength="12"/>
       </div>
-      <button class="btn" id="start-btn">启 动 引 擎</button>
+      <button class="btn" id="start-btn">${t('game.start')}</button>
+      <button class="btn btn-sub" id="settings-btn">${t('game.settings')}</button>
     </div>
   `);
   layer().appendChild(screen);
@@ -31,15 +32,20 @@ export function showTitle(defaultSeed: string, onStart: (seed: string) => void):
     screen.remove();
     onStart(input.value.trim() || defaultSeed);
   });
+  screen.querySelector('#settings-btn')!.addEventListener('click', () => {
+    screen.remove();
+    onSettings();
+  });
 }
 
-export function showPause(onResume: () => void, onRestart: () => void): void {
+export function showPause(onResume: () => void, onRestart: () => void, onSettings: () => void): void {
   const screen = el(`
     <div class="screen">
-      <h1>已 暂 停</h1>
-      <h2>锅 炉 保 压 中</h2>
-      <button class="btn" id="resume-btn">继 续</button>
-      <button class="btn" id="restart-btn">重 新 开 始</button>
+      <h1>${t('pause.title')}</h1>
+      <h2>${t('pause.subtitle')}</h2>
+      <button class="btn" id="resume-btn">${t('pause.resume')}</button>
+      <button class="btn" id="settings-btn">${t('game.settings')}</button>
+      <button class="btn" id="restart-btn">${t('pause.restart')}</button>
     </div>
   `);
   layer().appendChild(screen);
@@ -47,37 +53,87 @@ export function showPause(onResume: () => void, onRestart: () => void): void {
     screen.remove();
     onResume();
   });
+  screen.querySelector('#settings-btn')!.addEventListener('click', () => {
+    screen.remove();
+    onSettings();
+  });
   screen.querySelector('#restart-btn')!.addEventListener('click', () => {
     screen.remove();
     onRestart();
   });
 }
 
-export function showUpgradeChoice(upgrades: Upgrade[], onPick: (u: Upgrade) => void): void {
-  const cards = upgrades
-    .map(
-      (u, i) => `
-      <div class="upgrade-card" data-i="${i}">
-        <div class="icon">${u.icon}</div>
-        <div class="name">${u.name}</div>
-        <div class="desc">${u.desc}</div>
-      </div>`,
-    )
-    .join('');
+export interface SettingsValues {
+  musicVolume: number;
+  sfxVolume: number;
+}
+
+/** 设置页:语言切换 + 音乐/音效音量 */
+export function showSettings(
+  values: SettingsValues,
+  onChange: (v: SettingsValues) => void,
+  onBack: () => void,
+): void {
   const screen = el(`
     <div class="screen">
-      <h1>房 间 清 除</h1>
-      <h2>选 择 一 项 改 装</h2>
-      <div class="upgrade-cards">${cards}</div>
+      <h1>${t('settings.title')}</h1>
+      <div class="setting-row">
+        <label>${t('settings.lang')}</label>
+        <div class="lang-toggle">
+          <button class="btn btn-sub" id="lang-zh">中文</button>
+          <button class="btn btn-sub" id="lang-en">EN</button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label>${t('settings.music')}</label>
+        <input type="range" id="vol-music" min="0" max="100" value="${Math.round(values.musicVolume * 100)}"/>
+        <span id="vol-music-val">${Math.round(values.musicVolume * 100)}</span>
+      </div>
+      <div class="setting-row">
+        <label>${t('settings.sfx')}</label>
+        <input type="range" id="vol-sfx" min="0" max="100" value="${Math.round(values.sfxVolume * 100)}"/>
+        <span id="vol-sfx-val">${Math.round(values.sfxVolume * 100)}</span>
+      </div>
+      <button class="btn" id="back-btn">${t('game.back')}</button>
     </div>
   `);
   layer().appendChild(screen);
-  screen.querySelectorAll('.upgrade-card').forEach((card) => {
-    card.addEventListener('click', () => {
-      const i = Number((card as HTMLElement).dataset.i);
-      screen.remove();
-      onPick(upgrades[i]);
-    });
+
+  const current = { ...values };
+  const emit = () => onChange({ ...current });
+
+  const musicInput = screen.querySelector<HTMLInputElement>('#vol-music')!;
+  const sfxInput = screen.querySelector<HTMLInputElement>('#vol-sfx')!;
+  musicInput.addEventListener('input', () => {
+    current.musicVolume = Number(musicInput.value) / 100;
+    screen.querySelector('#vol-music-val')!.textContent = musicInput.value;
+    emit();
+  });
+  sfxInput.addEventListener('input', () => {
+    current.sfxVolume = Number(sfxInput.value) / 100;
+    screen.querySelector('#vol-sfx-val')!.textContent = sfxInput.value;
+    emit();
+  });
+
+  const markLang = () => {
+    screen.querySelector('#lang-zh')!.classList.toggle('active', getLang() === 'zh');
+    screen.querySelector('#lang-en')!.classList.toggle('active', getLang() === 'en');
+  };
+  markLang();
+  screen.querySelector('#lang-zh')!.addEventListener('click', () => {
+    setLang('zh' as Lang);
+    screen.remove();
+    showSettings(current, onChange, onBack); // 重绘以应用新语言
+  });
+  screen.querySelector('#lang-en')!.addEventListener('click', () => {
+    setLang('en' as Lang);
+    screen.remove();
+    showSettings(current, onChange, onBack);
+  });
+
+  screen.querySelector('#back-btn')!.addEventListener('click', () => {
+    screen.remove();
+    onBack();
   });
 }
 
@@ -89,15 +145,15 @@ export function showGameOver(
   const secs = Math.floor(stats.timeSec % 60);
   const screen = el(`
     <div class="screen">
-      <h1>引 擎 熄 火</h1>
-      <h2>你 的 机 壳 散 落 在 深 渊 中</h2>
+      <h1>${t('over.title')}</h1>
+      <h2>${t('over.subtitle')}</h2>
       <p class="stats-line">
-        到达层数:${stats.floor}<br/>
-        击毁机械:${stats.kills}<br/>
-        存活时间:${mins}分${secs}秒<br/>
-        种子:${stats.seed}
+        ${t('over.floor')}:${stats.floor}<br/>
+        ${t('over.kills')}:${stats.kills}<br/>
+        ${t('over.time')}:${mins}${t('over.min')}${secs}${t('over.sec')}<br/>
+        ${t('over.seed')}:${stats.seed}
       </p>
-      <button class="btn" id="restart-btn">再 来 一 局</button>
+      <button class="btn" id="restart-btn">${t('over.again')}</button>
     </div>
   `);
   layer().appendChild(screen);

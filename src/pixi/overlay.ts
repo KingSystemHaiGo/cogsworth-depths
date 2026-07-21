@@ -2,6 +2,7 @@
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { UpgradeScreen } from './upgradeScreen.ts';
 import type { Upgrade } from '../game/upgrades.ts';
+import { t } from '../core/i18n.ts';
 
 interface DamageNumber {
   text: Text;
@@ -334,7 +335,7 @@ export class Overlay {
       }
     }
     this.hpText.text = `${Math.ceil(hp)} / ${maxHp}`;
-    this.floorText.text = `第 ${floorIdx} 层 · ${roomLabel}`;
+    this.floorText.text = `${t('hud.floor', { n: floorIdx })} · ${roomLabel}`;
     this.cogText.text = `⚙ ${cogs}`;
   }
 
@@ -420,8 +421,9 @@ export class Overlay {
   /** 连击数(>=2 显示,带弹跳) */
   setCombo(n: number): void {
     if (n >= 2) {
-      const changed = this.comboText.text !== `${n} 连击`;
-      this.comboText.text = `${n} 连击`;
+      const label = `${n} ${t('hud.combo')}`;
+      const changed = this.comboText.text !== label;
+      this.comboText.text = label;
       this.comboText.position.set(this.app.screen.width - 20, 96 + (this.minimap.height || 0));
       if (changed) this.comboPop = 1;
     } else {
