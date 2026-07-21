@@ -41,6 +41,8 @@ interface Enemy {
   enraged: boolean; // boss 二阶段
   spawnT: number; // 出生入场动画剩余时间
   hitPop: number; // 受击挤压脉冲 0..1
+  affix: 'swift' | 'splitting' | 'shielded' | null;
+  dmgTaken: number; // 承伤系数(坚盾 0.5)
 }
 
 interface Drop {
@@ -95,6 +97,7 @@ export class Game {
     muzzleT: 0,
     shieldUp: false,
     shieldCd: 0,
+    slowT: 0,
     aimX: 1,
     aimZ: 0,
   };
@@ -103,7 +106,7 @@ export class Game {
   private enemies: Enemy[] = [];
   /** 敌人网格对象池:生成/死亡复用,避免 GC 与重复构造 */
   private meshPool = new Map<EnemyKind, THREE.Group[]>();
-  private pendingSpawns: { kind: EnemyKind; x: number; z: number; t: number }[] = [];
+  private pendingSpawns: { kind: EnemyKind; x: number; z: number; t: number; affix: Enemy['affix'] }[] = [];
   private wavesTotal = 0;
   private wavesDone = 0;
   private waveSize = 0;
@@ -257,7 +260,7 @@ export class Game {
     if (!node.cleared && (node.kind === 'normal' || node.kind === 'boss')) this.startWaves(node);
     // Boss 房只在未清时亮血条和战歌(清空后再进不应触发)
     if (node.kind === 'boss' && !node.cleared) {
-      this.overlay.setBossHp(this.floorIndex % 2 === 0 ? t('boss2.name') : t('boss.name'), 1);
+      this.overlay.setBossHp(this.bossName(this.bossKindForFloor()), 1);
       music.setIntensity(1);
     } else {
       music.setIntensity(0);
@@ -417,17 +420,18 @@ export class Game {
     if (node.kind === 'boss') {
       this.wavesTotal = 1;
       this.waveSize = 1;
-      // 奇数层锅炉魔像,偶数层人偶剧团长
-      const bossKind: EnemyKind = this.floorIndex % 2 === 0 ? 'ringmaster' : 'boss';
+      // 三位 Boss 按层轮换
+      const bossKind = this.bossKindForFloor();
       this.overlay.banner(
-        bossKind === 'boss' ? t('boss.name') : t('boss2.name'),
-        bossKind === 'boss' ? t('boss1.intro') : t('boss2.intro'),
+        this.bossName(bossKind),
+        bossKind === 'boss' ? t('boss1.intro') : bossKind === 'ringmaster' ? t('boss2.intro') : t('boss3.intro'),
       );
       this.stage.shake(0.6);
       this.scheduleWave(bossKind);
       return;
     }
     const count = BALANCE.spawnCount(this.floorIndex, (a, b) => this.rng.int(a, b));
+    if (node.elite) this.overlay.banner(t(`elite.${node.elite}` as 'elite.swift' | 'elite.splitting' | 'elite.shielded'), undefined, 0xffb347);
     this.wavesTotal = this.floorIndex >= 4 ? 3 : this.floorIndex >= 2 ? 2 : 1;
     this.waveSize = node.waveSize > 0 ? node.waveSize : Math.ceil(count / this.wavesTotal);
     // 恢复中途离开时的波次进度
@@ -476,14 +480,14 @@ export class Game {
         }
       }
       const delay = (kind === 'boss' ? 1.2 : 0.55) + i * 0.12;
-      this.pendingSpawns.push({ kind, x, z, t: delay });
+      this.pendingSpawns.push({ kind, x, z, t: delay, affix: this.currentNode?.elite ?? null });
       const tmp = { x: 0, y: 0 };
       this.worldToScreen(x, z, tmp);
       this.overlay.ring(tmp.x, tmp.y, kind === 'boss' ? 0xff5522 : 0xff7733, kind === 'boss' ? 90 : 40, delay);
     }
   }
 
-  private spawnEnemy(kind: EnemyKind, x: number, z: number, hpScale: number): void {
+  private spawnEnemy(kind: EnemyKind, x: number, z: number, hpScale: number, affix: Enemy['affix'] = null): void {
     const def = BALANCE.enemies[kind];
     const mesh = this.acquireMesh(kind);
     mesh.position.set(x, 0, z);
@@ -496,8 +500,8 @@ export class Game {
       vz: 0,
       kbx: 0,
       kbz: 0,
-      hp: kind === 'boss' || kind === 'ringmaster' ? BALANCE.bossHp(this.floorIndex) : def.hp * hpScale,
-      maxHp: kind === 'boss' || kind === 'ringmaster' ? BALANCE.bossHp(this.floorIndex) : def.hp * hpScale,
+      hp: this.isBoss(kind) ? BALANCE.bossHp(this.floorIndex) : def.hp * hpScale,
+      maxHp: this.isBoss(kind) ? BALANCE.bossHp(this.floorIndex) : def.hp * hpScale,
       r: def.r,
       speed: def.speed,
       dmg: def.dmg,
@@ -506,9 +510,12 @@ export class Game {
       stateT: 0,
       phase: 0,
       enraged: false,
-      spawnT: kind === 'boss' || kind === 'ringmaster' ? 0.5 : 0.22,
+      spawnT: this.isBoss(kind) ? 0.5 : 0.22,
       hitPop: 0,
+      affix,
+      dmgTaken: affix === 'shielded' ? 0.5 : 1,
     });
+    if (affix === 'swift') this.enemies[this.enemies.length - 1].speed *= 1.5;
   }
 
   /** 从对象池取敌人网格(没有才新建),并重置所有可变状态 */
@@ -605,7 +612,7 @@ export class Game {
     // 敌人头顶血条(只显示受伤的,Boss 用底部大血条)
     this.enemyHpList.length = 0;
     for (const e of this.enemies) {
-      if (e.hp < e.maxHp && e.kind !== 'boss') {
+      if (e.hp < e.maxHp && !this.isBoss(e.kind)) {
         this.enemyHpList.push({ x: e.x, z: e.z, ratio: e.hp / e.maxHp });
       }
     }
@@ -622,7 +629,7 @@ export class Game {
         const s = this.pendingSpawns[i];
         s.t -= dt;
         if (s.t <= 0) {
-          this.spawnEnemy(s.kind, s.x, s.z, BALANCE.hpScale(this.floorIndex));
+          this.spawnEnemy(s.kind, s.x, s.z, BALANCE.hpScale(this.floorIndex), s.affix);
           this.pendingSpawns.splice(i, 1);
           synth.doorOpen();
         }
@@ -723,9 +730,11 @@ export class Game {
       }
     } else {
       // 速度平滑趋近(急停急起有质量感,但不拖泥带水)
+      if (p.slowT > 0) p.slowT -= dt;
+      const slowMult = p.slowT > 0 ? 0.55 : 1;
       const k = Math.min(1, dt * 16);
-      p.vx += (axis.x * this.stats.speed - p.vx) * k;
-      p.vz += (axis.y * this.stats.speed - p.vz) * k;
+      p.vx += (axis.x * this.stats.speed * slowMult - p.vx) * k;
+      p.vz += (axis.y * this.stats.speed * slowMult - p.vz) * k;
       p.x += p.vx * dt;
       p.z += p.vz * dt;
     }
@@ -842,7 +851,7 @@ export class Game {
       // 出生入场:从预警圈中弹出,期间不行动
       if (e.spawnT > 0) {
         e.spawnT -= dt;
-        const prog = 1 - Math.max(0, e.spawnT) / (e.kind === 'boss' || e.kind === 'ringmaster' ? 0.5 : 0.22);
+        const prog = 1 - Math.max(0, e.spawnT) / (this.isBoss(e.kind) ? 0.5 : 0.22);
         e.mesh.scale.setScalar(0.3 + 0.7 * prog);
         e.mesh.position.set(e.x, 0, e.z);
         continue;
@@ -1059,6 +1068,10 @@ export class Game {
           this.updateRingmaster(e, dt, dist, nx, nz, time);
           break;
         }
+        case 'colossus': {
+          this.updateColossus(e, dt, dist, nx, nz, time);
+          break;
+        }
       }
 
       // 受击击退(快速衰减)
@@ -1079,6 +1092,77 @@ export class Game {
 
       e.mesh.position.x = e.x;
       e.mesh.position.z = e.z;
+    }
+  }
+
+  /** 钟表巨像:指针转动 + 钟摆横扫弹幕 + 时间凝滞领域 */
+  private updateColossus(e: Enemy, dt: number, dist: number, nx: number, nz: number, time: number): void {
+    // 指针转动(二阶段狂转)
+    const spd = e.enraged ? 12 : 3;
+    const hh = e.mesh.userData.hourHand as THREE.Mesh | undefined;
+    const mh = e.mesh.userData.minHand as THREE.Mesh | undefined;
+    if (hh) hh.rotation.z -= dt * spd * 0.12;
+    if (mh) mh.rotation.z -= dt * spd;
+    // 钟摆摆动
+    const pend = e.mesh.userData.pendulum as THREE.Mesh | undefined;
+    if (pend) pend.rotation.z = Math.sin(time * 2.2) * 0.4;
+
+    e.stateT += dt;
+    if (!e.enraged && e.hp < e.maxHp * 0.5) {
+      e.enraged = true;
+      e.speed *= 1.4;
+      synth.explosion();
+      this.stage.shake(1.2);
+      this.overlay.flash(0xff5522, 0.35);
+      const tmp = { x: 0, y: 0 };
+      this.worldToScreen(e.x, e.z, tmp);
+      this.overlay.ring(tmp.x, tmp.y, 0xff5522, 200);
+    }
+    const cdScale = e.enraged ? 0.65 : 1;
+
+    if (e.phase === 0) {
+      e.x += nx * e.speed * dt;
+      e.z += nz * e.speed * dt;
+      if (e.stateT > 2.4 * cdScale) {
+        e.stateT = 0;
+        e.phase = this.rng.int(1, 3);
+      }
+    } else if (e.phase === 1) {
+      // 钟摆横扫:以玩家方向为中心,扇形弹幕从一侧扫到另一侧
+      const base = Math.atan2(nx, nz);
+      const sweepDur = 1.0;
+      const prog = Math.min(1, e.stateT / sweepDur);
+      const sweepRange = e.enraged ? 1.6 : 1.1;
+      const a = base - sweepRange + prog * sweepRange * 2;
+      if (Math.floor(e.stateT * 14) !== Math.floor((e.stateT - dt) * 14)) {
+        this.fireEnemyBullet(e.x, e.z, Math.sin(a) * 9, Math.cos(a) * 9, 13);
+      }
+      if (prog >= 1) {
+        e.phase = 0;
+        e.stateT = -0.9 * cdScale;
+      }
+    } else if (e.phase === 2) {
+      // 时间凝滞:全屏预警后玩家减速 2.5s
+      this.player.slowT = 2.5;
+      this.overlay.flash(0x4a7a9a, 0.25);
+      this.overlay.floatText(this.player.x, this.player.z - 1.5, t('boss3.slow'), 0x9fc8d8);
+      synth.doorOpen();
+      e.phase = 0;
+      e.stateT = -1.4 * cdScale;
+    } else {
+      // 环射
+      const n = e.enraged ? 16 : 12;
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2 + time * 0.5;
+        this.fireEnemyBullet(e.x, e.z, Math.sin(a) * 7.5, Math.cos(a) * 7.5, 12);
+      }
+      synth.shoot();
+      e.phase = 0;
+      e.stateT = -1.1 * cdScale;
+    }
+
+    if (this.currentNode) {
+      this.overlay.setBossHp(t('boss3.name'), e.hp / e.maxHp);
     }
   }
 
@@ -1333,6 +1417,19 @@ export class Game {
     }
   }
 
+  private isBoss(kind: EnemyKind): boolean {
+    return kind === 'boss' || kind === 'ringmaster' || kind === 'colossus';
+  }
+
+  private bossKindForFloor(): EnemyKind {
+    const m = this.floorIndex % 3;
+    return m === 1 ? 'boss' : m === 2 ? 'ringmaster' : 'colossus';
+  }
+
+  private bossName(kind: EnemyKind): string {
+    return kind === 'boss' ? t('boss.name') : kind === 'ringmaster' ? t('boss2.name') : t('boss3.name');
+  }
+
   private cdMult(): number {
     return 1 - 0.15 * (loadMeta().upgrades['boiler'] ?? 0);
   }
@@ -1351,7 +1448,7 @@ export class Game {
 
   private damageEnemy(idx: number, dmg: number, crit: boolean, dirX = 0, dirZ = 0): void {
     const e = this.enemies[idx];
-    e.hp -= dmg;
+    e.hp -= dmg * e.dmgTaken;
     // 击退:沿弹道方向推一小段(Boss 免疫)
     if (e.kind !== 'boss') {
       const v = Math.hypot(dirX, dirZ) || 1;
@@ -1395,15 +1492,15 @@ export class Game {
     this.dying.push({ mesh: e.mesh, kind: e.kind, t: 0 });
     this.enemies.splice(idx, 1);
 
-    // 分裂球死亡:裂成两只小蜘蛛
-    if (e.kind === 'splitter') {
+    // 分裂球/分裂词缀死亡:裂成小蜘蛛
+    if (e.kind === 'splitter' || (e.affix === 'splitting' && e.kind !== 'mini' && !this.isBoss(e.kind))) {
       this.spawnEnemy('mini', e.x - 0.7, e.z, 1);
-      this.spawnEnemy('mini', e.x + 0.7, e.z, 1);
+      if (e.kind === 'splitter') this.spawnEnemy('mini', e.x + 0.7, e.z, 1);
     }
 
     if (byPlayer) {
       this.kills++;
-      if (e.kind === 'boss' || e.kind === 'ringmaster') this.bossKills++;
+      if (this.isBoss(e.kind)) this.bossKills++;
       // 连击:3 秒窗口内连续击杀
       this.comboCount++;
       this.comboTimer = BALANCE.combo.window;
@@ -1416,9 +1513,9 @@ export class Game {
         for (let k = 0; k < BALANCE.drops.bossCogs; k++) {
           this.spawnDrop(e.x + this.rng.range(-1.5, 1.5), e.z + this.rng.range(-1.5, 1.5), 'cog');
         }
-      } else if (this.rng.chance(BALANCE.drops.heartChance)) {
+      } else if (this.rng.chance(BALANCE.drops.heartChance * (this.currentNode?.elite ? 2 : 1))) {
         this.spawnDrop(e.x, e.z);
-      } else if (this.rng.chance(BALANCE.drops.cogChance + 0.08 * this.stats.scavenger)) {
+      } else if (this.rng.chance((BALANCE.drops.cogChance + 0.08 * this.stats.scavenger) * (this.currentNode?.elite ? 2 : 1))) {
         this.spawnDrop(e.x, e.z, 'cog');
       }
     }

@@ -178,7 +178,8 @@ export type EnemyKind =
   | 'sniper'
   | 'tinker'
   | 'boss'
-  | 'ringmaster';
+  | 'ringmaster'
+  | 'colossus';
 
 export function makeEnemyMesh(kind: EnemyKind): THREE.Group {
   const g = buildEnemyMesh(kind);
@@ -196,6 +197,7 @@ export function makeEnemyMesh(kind: EnemyKind): THREE.Group {
     tinker: 0.5,
     boss: 1.9,
     ringmaster: 1.7,
+    colossus: 1.8,
   };
   g.add(makeBlobShadow(shadowR[kind]));
   return g;
@@ -506,6 +508,50 @@ function buildEnemyMesh(kind: EnemyKind): THREE.Group {
         string.position.set(side * 0.4, 4.6, 0);
         g.add(string);
       }
+      return g;
+    }
+    case 'colossus': {
+      // 钟表巨像:巨型落地钟躯干 + 指针 + 钟摆
+      const g = new THREE.Group();
+      // 钟柜
+      const cabinet = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.4, 0.8), toonMat(0x4a3226));
+      cabinet.position.y = 1.2;
+      g.add(cabinet);
+      const trim = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 0.86), brassMat);
+      trim.position.y = 2.3;
+      g.add(trim);
+      // 表盘
+      const dial = new THREE.Mesh(new THREE.CircleGeometry(0.52, 20), toonMat(0xd8cdb4));
+      dial.position.set(0, 1.85, 0.42);
+      g.add(dial);
+      const dialRim = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.06, 8, 24), brassMat);
+      dialRim.position.set(0, 1.85, 0.42);
+      g.add(dialRim);
+      // 指针(由 game 驱动)
+      const hourHand = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.28, 0.02), ironDarkMat);
+      hourHand.geometry.translate(0, 0.14, 0);
+      hourHand.position.set(0, 1.85, 0.44);
+      g.add(hourHand);
+      const minHand = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.42, 0.02), ironDarkMat);
+      minHand.geometry.translate(0, 0.21, 0);
+      minHand.position.set(0, 1.85, 0.44);
+      g.add(minHand);
+      g.userData.hourHand = hourHand;
+      g.userData.minHand = minHand;
+      // 钟摆
+      const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.9, 6), brassMat);
+      rod.geometry.translate(0, -0.45, 0);
+      rod.position.set(0, 1.3, 0.3);
+      const bob = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.06, 12), copperMat);
+      bob.rotation.x = Math.PI / 2;
+      bob.position.y = -0.9;
+      rod.add(bob);
+      g.add(rod);
+      g.userData.pendulum = rod;
+      // 顶部铃铛
+      const bell = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.3, 8), brassMat);
+      bell.position.y = 2.55;
+      g.add(bell);
       return g;
     }
     case 'boss': {

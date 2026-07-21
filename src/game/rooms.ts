@@ -13,6 +13,8 @@ export interface RoomNode {
   /** 波次进度:中途离开后重进时恢复,不重置 */
   wavesSpawned: number;
   waveSize: number;
+  /** 精英词缀(仅普通战斗房,2 层起 30% 概率) */
+  elite?: 'swift' | 'splitting' | 'shielded';
 }
 
 export interface Floor {
@@ -65,6 +67,15 @@ export function generateFloor(rng: RNG, roomCount: number): Floor {
   // 支线挂一个宝箱房和一个商店(挂在随机普通房的空方向上)
   attachSpecial(rng, rooms, byPos, 'treasure');
   attachSpecial(rng, rooms, byPos, 'shop');
+
+  // 精英房间:2 层起 30% 普通房带词缀
+  if (roomCount > 5) {
+    for (const r of rooms) {
+      if (r.kind === 'normal' && rng.chance(0.3)) {
+        r.elite = rng.pick(['swift', 'splitting', 'shielded'] as const);
+      }
+    }
+  }
 
   return { rooms, startId: start.id, bossId: cur.id };
 }

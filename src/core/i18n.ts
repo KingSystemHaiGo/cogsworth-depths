@@ -55,6 +55,9 @@ const TEXTS = {
 
   'boss2.name': { zh: '人偶剧团长 · 玛戈', en: 'Ringmaster MARGOT' },
   'boss2.intro': { zh: '演出开始,观众只有一位。', en: 'The show begins. Audience of one.' },
+  'boss3.name': { zh: '钟表巨像 · 克罗诺斯', en: 'Chron Colossus KRONOS' },
+  'boss3.intro': { zh: '时间到了。', en: 'Time is up.' },
+  'boss3.slow': { zh: '时间凝滞!', en: 'TIME SEIZES!' },
   'boss1.intro': { zh: '它的心脏还在烧。', en: 'Its heart still burns.' },
   'shop.welcome': { zh: '齿轮商:都是好货,用残片换。', en: 'Cogmonger: fine goods, cogs only.' },
   'boss.defeated': { zh: '锅炉停转了。', en: 'The boiler falls silent.' },
@@ -68,6 +71,10 @@ const TEXTS = {
   'hud.floor': { zh: '第 {n} 层', en: 'Floor {n}' },
   'hud.combo': { zh: '连击', en: 'combo' },
   'hud.wave': { zh: '第 {a}/{b} 波', en: 'Wave {a}/{b}' },
+  'elite.swift': { zh: '迅捷精英房!', en: 'SWIFT ELITES!' },
+  'elite.splitting': { zh: '分裂精英房!', en: 'SPLITTING ELITES!' },
+  'elite.shielded': { zh: '坚盾精英房!', en: 'SHIELDED ELITES!' },
+  'room.elite': { zh: '精英房', en: 'Elite room' },
 
   // 剧情:每层的名字与医生日志
   'floor.1': { zh: '雾都下水道', en: 'Fog City Sewers' },

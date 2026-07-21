@@ -28,6 +28,7 @@ export const BALANCE = {
     tinker: { hp: 30, speed: 3.0, r: 0.45, dmg: 6 },
     boss: { hp: 950, speed: 1.8, r: 1.6, dmg: 20 },
     ringmaster: { hp: 850, speed: 1.6, r: 1.5, dmg: 18 },
+    colossus: { hp: 1000, speed: 1.4, r: 1.5, dmg: 22 },
   },
 
   /** 难度曲线:血量按二次多项式增长(前期平缓,后期陡峭) */
