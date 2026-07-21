@@ -309,3 +309,26 @@ html, body {
   color: var(--text-dim);
   line-height: 1.7;
 }
+
+.upgrade-card .price {
+  margin-top: 10px;
+  font-size: 15px;
+  font-weight: bold;
+  color: var(--brass-light);
+}
+
+.upgrade-card .lv {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.upgrade-card.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.upgrade-card.disabled:hover {
+  border-color: var(--brass-dim);
+  transform: none;
+  box-shadow: none;
+}

@@ -48,6 +48,17 @@ const TEXTS = {
   'settings.music': { zh: '音乐音量', en: 'Music volume' },
   'settings.sfx': { zh: '音效音量', en: 'SFX volume' },
 
+  'game.workshop': { zh: '改 装 间', en: 'WORKSHOP' },
+  'meta.title': { zh: '改 装 间', en: 'WORKSHOP' },
+  'meta.subtitle': { zh: '齿轮残片:{n} · 永久强化,死亡不失', en: 'Scrap: {n} · permanent upgrades, kept on death' },
+  'meta.maxed': { zh: '已满级', en: 'MAX' },
+
+  'boss2.name': { zh: '人偶剧团长 · 玛戈', en: 'Ringmaster MARGOT' },
+  'boss2.intro': { zh: '演出开始,观众只有一位。', en: 'The show begins. Audience of one.' },
+  'boss1.intro': { zh: '它的心脏还在烧。', en: 'Its heart still burns.' },
+  'shop.welcome': { zh: '齿轮商:都是好货,用残片换。', en: 'Cogmonger: fine goods, cogs only.' },
+  'boss.defeated': { zh: '锅炉停转了。', en: 'The boiler falls silent.' },
+
   'room.start': { zh: '出发大厅', en: 'Departure Hall' },
   'room.boss': { zh: 'Boss 房', en: 'Boss Room' },
   'room.treasure': { zh: '宝箱房', en: 'Treasure Room' },

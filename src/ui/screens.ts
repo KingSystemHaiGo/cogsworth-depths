@@ -1,5 +1,6 @@
 // DOM 界面层:标题 / 暂停 / 设置 / 结算(全部双语)
-import { t, getLang, setLang, Lang } from '../core/i18n.ts';
+import { t, getLang, setLang, Lang, lt } from '../core/i18n.ts';
+import { MetaState, META_UPGRADES } from '../core/meta.ts';
 
 const layer = () => document.getElementById('ui-layer')!;
 
@@ -13,6 +14,8 @@ export function showTitle(
   defaultSeed: string,
   onStart: (seed: string) => void,
   onSettings: () => void,
+  onWorkshop: () => void,
+  scrapCount: number,
 ): void {
   const screen = el(`
     <div class="screen">
@@ -23,6 +26,7 @@ export function showTitle(
         ${t('game.seed')} <input id="seed-input" type="text" value="${defaultSeed}" maxlength="12"/>
       </div>
       <button class="btn" id="start-btn">${t('game.start')}</button>
+      <button class="btn btn-sub" id="workshop-btn">${t('game.workshop')} ⚙${scrapCount}</button>
       <button class="btn btn-sub" id="settings-btn">${t('game.settings')}</button>
     </div>
   `);
@@ -32,9 +36,52 @@ export function showTitle(
     screen.remove();
     onStart(input.value.trim() || defaultSeed);
   });
+  screen.querySelector('#workshop-btn')!.addEventListener('click', () => {
+    screen.remove();
+    onWorkshop();
+  });
   screen.querySelector('#settings-btn')!.addEventListener('click', () => {
     screen.remove();
     onSettings();
+  });
+}
+
+/** 改装间:用齿轮残片购买永久升级(局外成长) */
+export function showWorkshop(
+  meta: MetaState,
+  onBuy: (id: string) => void,
+  onBack: () => void,
+): void {
+  const cards = META_UPGRADES.map((u) => {
+    const lv = meta.upgrades[u.id] ?? 0;
+    const maxed = lv >= u.maxLevel;
+    const cost = maxed ? null : u.cost(lv);
+    const affordable = cost !== null && meta.scrap >= cost;
+    return `
+      <div class="upgrade-card ${maxed || !affordable ? 'disabled' : ''}" data-id="${u.id}">
+        <div class="name">${lt(u.name)} <span class="lv">${lv}/${u.maxLevel}</span></div>
+        <div class="desc">${lt(u.desc)}</div>
+        <div class="price">${maxed ? t('meta.maxed') : `⚙${cost}`}</div>
+      </div>`;
+  }).join('');
+  const screen = el(`
+    <div class="screen">
+      <h1>${t('meta.title')}</h1>
+      <h2>${t('meta.subtitle', { n: meta.scrap })}</h2>
+      <div class="upgrade-cards">${cards}</div>
+      <button class="btn" id="back-btn">${t('game.back')}</button>
+    </div>
+  `);
+  layer().appendChild(screen);
+  screen.querySelectorAll('.upgrade-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      const id = (card as HTMLElement).dataset.id!;
+      onBuy(id);
+    });
+  });
+  screen.querySelector('#back-btn')!.addEventListener('click', () => {
+    screen.remove();
+    onBack();
   });
 }
 

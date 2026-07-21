@@ -24,7 +24,10 @@ export const BALANCE = {
     mini: { hp: 12, speed: 5.2, r: 0.3, dmg: 8 },
     warden: { hp: 90, speed: 1.5, r: 0.75, dmg: 18 },
     mortar: { hp: 45, speed: 2.0, r: 0.6, dmg: 16 },
+    sniper: { hp: 50, speed: 1.5, r: 0.55, dmg: 20 },
+    tinker: { hp: 30, speed: 3.0, r: 0.45, dmg: 6 },
     boss: { hp: 950, speed: 1.8, r: 1.6, dmg: 20 },
+    ringmaster: { hp: 850, speed: 1.6, r: 1.5, dmg: 18 },
   },
 
   /** 难度曲线:血量按二次多项式增长(前期平缓,后期陡峭) */

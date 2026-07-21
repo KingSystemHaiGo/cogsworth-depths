@@ -14,6 +14,8 @@ export interface PlayerStats {
   bounce: number; // 子弹墙面弹射次数
   shield: number; // 蒸汽护盾层数(>0 拥有)
   pet: number; // 齿轮宠物数量
+  boom: number; // 爆裂弹头等级(子弹命中爆炸)
+  scavenger: number; // 拾荒协议(磁吸范围+齿轮币加成)
 }
 
 export interface Upgrade {
@@ -120,6 +122,22 @@ export const UPGRADES: Upgrade[] = [
     name: { zh: '齿轮宠物', en: 'Gear Familiar' },
     desc: { zh: '环绕的齿轮:接触伤害敌人并挡下敌弹', en: 'Orbiting gear: hurts enemies and blocks shots' },
     apply: (s) => (s.pet += 1),
+  },
+  {
+    id: 'boom',
+    maxStacks: 2,
+    icon: '✹',
+    name: { zh: '爆裂弹头', en: 'Burst Rounds' },
+    desc: { zh: '子弹命中时爆炸,波及周围敌人', en: 'Bullets explode on hit, splashing nearby enemies' },
+    apply: (s) => (s.boom += 1),
+  },
+  {
+    id: 'scavenger',
+    maxStacks: 2,
+    icon: '⚿',
+    name: { zh: '拾荒协议', en: 'Scavenger Protocol' },
+    desc: { zh: '拾取磁吸范围 +50%,齿轮币掉率提升', en: 'Pickup magnet range +50%, more cog drops' },
+    apply: (s) => (s.scavenger += 1),
   },
 ];
 

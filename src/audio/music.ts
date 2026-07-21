@@ -43,6 +43,12 @@ class Music {
   private timer: number | null = null;
   private step = 0;
   private nextT = 0;
+  /** 0=探索 1=Boss 战(加锯齿低音层 + 踩镲加倍) */
+  intensity = 0;
+
+  setIntensity(level: number): void {
+    this.intensity = level;
+  }
 
   init(ctx: AudioContext, destination: AudioNode): void {
     this.ctx = ctx;
@@ -86,15 +92,19 @@ class Music {
   private playStep(s: number, t: number): void {
     const bar16 = s % STEPS_PER_BAR;
 
-    // 底鼓:四分音符
+    // 底鼓:四分音符(Boss 战补八分)
     if (bar16 % 4 === 0) this.kick(t);
+    if (this.intensity >= 1 && bar16 % 4 === 2) this.kick(t);
     // 军鼓:2、4 拍
     if (bar16 === 4 || bar16 === 12) this.snare(t);
-    // 踩镲:八分音符,反拍加重
+    // 踩镲:八分音符,反拍加重;Boss 战十六分
     if (bar16 % 2 === 0) this.hat(t, bar16 % 4 === 2 ? 0.09 : 0.05);
+    if (this.intensity >= 1 && bar16 % 2 === 1) this.hat(t, 0.04);
 
     const b = BASS[s];
     if (b) this.pluck(t, midi(b), 'square', 0.22, STEP_DUR * 1.8, 300);
+    // Boss 战锯齿低音层
+    if (this.intensity >= 1 && b) this.pluck(t, midi(b - 12), 'sawtooth', 0.12, STEP_DUR * 1.8, 500);
     const a = ARP[s];
     if (a) this.pluck(t, midi(a), 'square', 0.09, STEP_DUR * 1.2, 2200);
   }

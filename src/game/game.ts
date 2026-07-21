@@ -7,12 +7,15 @@ import { ThreeStage } from '../three/scene.ts';
 import { Room, DoorSide } from '../three/room.ts';
 import { makePlayerMesh, makeEnemyMesh, EnemyKind } from '../three/actors.ts';
 import { makeGear } from '../three/factory/gears.ts';
+import { SteamVent } from '../three/factory/steam.ts';
 import { generateFloor, Floor, RoomNode } from './rooms.ts';
 import { BALANCE } from './balance.ts';
 import { t, lt } from '../core/i18n.ts';
+import { loadMeta } from '../core/meta.ts';
 import { PlayerStats, Upgrade, drawUpgrades } from './upgrades.ts';
 import { Overlay } from '../pixi/overlay.ts';
 import { synth } from '../audio/synth.ts';
+import { music } from '../audio/music.ts';
 
 export type GameState = 'title' | 'playing' | 'paused' | 'upgrading' | 'dead';
 
@@ -84,7 +87,9 @@ export class Game {
   seed = '';
   floorIndex = 1;
   kills = 0;
+  bossKills = 0;
   timeSec = 0;
+  private reviveUsed = false;
 
   private rng = new RNG('init');
   private floor: Floor | null = null;
@@ -122,6 +127,8 @@ export class Game {
   private petTick = 0;
   private interactives: Interactive[] = [];
   private mortarShells: { sx: number; sz: number; tx: number; tz: number; x: number; z: number; t: number; mesh: THREE.Mesh }[] = [];
+  /** 蒸汽喷射机关:周期性喷发的地面喷口 */
+  private steamJets: { x: number; z: number; vent: SteamVent; timer: number; phase: number }[] = [];
   cogs = 0; // 齿轮币
   private exitPortal: THREE.Group | null = null;
   private dashT = 0;
@@ -177,6 +184,8 @@ export class Game {
       bounce: 0,
       shield: 0,
       pet: 0,
+      boom: 0,
+      scavenger: 0,
     };
   }
 
@@ -190,10 +199,16 @@ export class Game {
     this.seed = seed;
     this.floorIndex = 1;
     this.kills = 0;
+    this.bossKills = 0;
     this.timeSec = 0;
-    this.cogs = 0;
     this.stats = this.baseStats();
     this.upgradeCounts.clear();
+    // 局外成长生效
+    const meta = loadMeta();
+    const hullLv = meta.upgrades['hull'] ?? 0;
+    if (hullLv > 0) this.stats.maxHp += 25 * hullLv;
+    this.cogs = 5 * (meta.upgrades['spares'] ?? 0);
+    this.reviveUsed = false;
     this.player.hp = this.stats.maxHp;
     this.player.shieldUp = false;
     this.player.shieldCd = 0;
@@ -232,6 +247,8 @@ export class Game {
     this.affordWarned.clear();
     for (const s of this.mortarShells) this.stage.scene.remove(s.mesh);
     this.mortarShells = [];
+    for (const j of this.steamJets) this.stage.scene.remove(j.vent);
+    this.steamJets = [];
     this.clearBullets();
     if (this.exitPortal) {
       this.stage.scene.remove(this.exitPortal);
@@ -257,12 +274,31 @@ export class Game {
     }
 
     if (!node.cleared) this.startWaves(node);
-    if (node.kind === 'boss') this.overlay.setBossHp(t('boss.name'), 1);
+    if (node.kind === 'boss') {
+      this.overlay.setBossHp(this.floorIndex % 2 === 0 ? t('boss2.name') : t('boss.name'), 1);
+      music.setIntensity(1);
+    } else {
+      music.setIntensity(0);
+    }
     // 特殊房间:宝箱/商店,无敌人,门常开
     if (node.kind === 'treasure' || node.kind === 'shop') {
       node.cleared = true;
       this.room.setAllDoors(true);
       this.setupSpecialRoom(node.kind);
+      if (node.kind === 'shop') this.overlay.banner(t('room.shop'), t('shop.welcome'), 0xe8c877);
+    }
+    // 蒸汽喷射机关:战斗房 1-2 个,周期性喷发逼迫走位
+    if (!node.cleared && node.kind === 'normal') {
+      const jetCount = this.floorIndex >= 2 ? this.rng.int(1, 2) : this.rng.int(0, 1);
+      for (let i = 0; i < jetCount; i++) {
+        const jx = this.rng.range(-CONFIG.roomW / 2 + 5, CONFIG.roomW / 2 - 5);
+        const jz = this.rng.range(-CONFIG.roomD / 2 + 5, CONFIG.roomD / 2 - 5);
+        if (Math.hypot(jx, jz) < 4) continue;
+        const vent = new SteamVent(this.rng, 26, 3.2);
+        vent.position.set(jx, 0.1, jz);
+        this.stage.scene.add(vent);
+        this.steamJets.push({ x: jx, z: jz, vent, timer: this.rng.range(0, 2), phase: 0 });
+      }
     }
     this.overlay.setMinimap(this.floor.rooms, nodeId);
   }
@@ -399,15 +435,20 @@ export class Game {
     if (node.kind === 'boss') {
       this.wavesTotal = 1;
       this.waveSize = 1;
-      // Boss 落场前的横幅预警
-      this.overlay.banner(t('boss.name'));
+      // 奇数层锅炉魔像,偶数层人偶剧团长
+      const bossKind: EnemyKind = this.floorIndex % 2 === 0 ? 'ringmaster' : 'boss';
+      this.overlay.banner(
+        bossKind === 'boss' ? t('boss.name') : t('boss2.name'),
+        bossKind === 'boss' ? t('boss1.intro') : t('boss2.intro'),
+      );
       this.stage.shake(0.6);
-    } else {
-      const count = BALANCE.spawnCount(this.floorIndex, (a, b) => this.rng.int(a, b));
-      this.wavesTotal = this.floorIndex >= 4 ? 3 : this.floorIndex >= 2 ? 2 : 1;
-      this.waveSize = Math.ceil(count / this.wavesTotal);
+      this.scheduleWave(bossKind);
+      return;
     }
-    this.scheduleWave(node.kind === 'boss' ? 'boss' : null);
+    const count = BALANCE.spawnCount(this.floorIndex, (a, b) => this.rng.int(a, b));
+    this.wavesTotal = this.floorIndex >= 4 ? 3 : this.floorIndex >= 2 ? 2 : 1;
+    this.waveSize = Math.ceil(count / this.wavesTotal);
+    this.scheduleWave(null);
   }
 
   /** 当前层数的敌人种类配比 */
@@ -458,8 +499,8 @@ export class Game {
       vz: 0,
       kbx: 0,
       kbz: 0,
-      hp: kind === 'boss' ? BALANCE.bossHp(this.floorIndex) : def.hp * hpScale,
-      maxHp: kind === 'boss' ? BALANCE.bossHp(this.floorIndex) : def.hp * hpScale,
+      hp: kind === 'boss' || kind === 'ringmaster' ? BALANCE.bossHp(this.floorIndex) : def.hp * hpScale,
+      maxHp: kind === 'boss' || kind === 'ringmaster' ? BALANCE.bossHp(this.floorIndex) : def.hp * hpScale,
       r: def.r,
       speed: def.speed,
       dmg: def.dmg,
@@ -468,7 +509,7 @@ export class Game {
       stateT: 0,
       phase: 0,
       enraged: false,
-      spawnT: kind === 'boss' ? 0.5 : 0.22,
+      spawnT: kind === 'boss' || kind === 'ringmaster' ? 0.5 : 0.22,
       hitPop: 0,
     });
   }
@@ -518,6 +559,7 @@ export class Game {
     this.updatePets(dt, time);
     this.updateInteractives(dt, time);
     this.refreshPlayerAttachments();
+    this.updateSteamJets(dt, time);
     // 敌人头顶血条(只显示受伤的,Boss 用底部大血条)
     this.enemyHpList.length = 0;
     for (const e of this.enemies) {
@@ -527,8 +569,8 @@ export class Game {
     }
     this.overlay.setEnemyHp(this.enemyHpList);
     this.overlay.setCooldowns(
-      1 - Math.max(0, this.dashCd) / BALANCE.player.dashCd,
-      1 - Math.max(0, this.rollCd) / BALANCE.player.rollCd,
+      1 - Math.max(0, this.dashCd) / (BALANCE.player.dashCd * this.cdMult()),
+      1 - Math.max(0, this.rollCd) / (BALANCE.player.rollCd * this.cdMult()),
     );
 
     // 房间清除判定:场上无敌人且无待生成才算
@@ -601,7 +643,7 @@ export class Game {
       (axis.x !== 0 || axis.y !== 0)
     ) {
       this.dashT = 0.14;
-      this.dashCd = BALANCE.player.dashCd;
+      this.dashCd = BALANCE.player.dashCd * this.cdMult();
       this.dashX = axis.x;
       this.dashZ = axis.y;
       synth.dash();
@@ -618,7 +660,7 @@ export class Game {
       (axis.x !== 0 || axis.y !== 0)
     ) {
       this.rollT = 0.42;
-      this.rollCd = BALANCE.player.rollCd;
+      this.rollCd = BALANCE.player.rollCd * this.cdMult();
       this.rollX = axis.x;
       this.rollZ = axis.y;
       p.invuln = Math.max(p.invuln, 0.45);
@@ -772,7 +814,7 @@ export class Game {
       // 出生入场:从预警圈中弹出,期间不行动
       if (e.spawnT > 0) {
         e.spawnT -= dt;
-        const prog = 1 - Math.max(0, e.spawnT) / (e.kind === 'boss' ? 0.5 : 0.22);
+        const prog = 1 - Math.max(0, e.spawnT) / (e.kind === 'boss' || e.kind === 'ringmaster' ? 0.5 : 0.22);
         e.mesh.scale.setScalar(0.3 + 0.7 * prog);
         e.mesh.position.set(e.x, 0, e.z);
         continue;
@@ -911,8 +953,82 @@ export class Game {
           }
           break;
         }
+        case 'sniper': {
+          // 钟表狙击手:远距离驻留,1.2s 激光蓄力后发射高速弹
+          const want = dist < 9 ? -1 : dist > 13 ? 1 : 0;
+          e.x += nx * e.speed * want * dt;
+          e.z += nz * e.speed * want * dt;
+          e.mesh.rotation.y = Math.atan2(nx, nz);
+          // 怀表指针转动
+          const hand = e.mesh.userData.hand as THREE.Mesh | undefined;
+          if (hand) hand.rotation.z -= dt * 2;
+          const laser = e.mesh.userData.laser as THREE.Mesh | undefined;
+          e.fireCd -= dt;
+          if (e.fireCd <= 0 && dist < 16) {
+            e.phase = e.phase === 0 ? 1 : e.phase;
+            if (e.phase === 1) {
+              // 蓄力:激光线指向玩家
+              e.stateT += dt;
+              if (laser) {
+                laser.visible = true;
+                laser.position.set(0.2, 0.6, 0.6 + dist / 2);
+                laser.scale.z = dist;
+                laser.scale.x = laser.scale.y = 1 + Math.sin(time * 30) * 0.3;
+              }
+              if (e.stateT >= 1.2) {
+                e.stateT = 0;
+                e.phase = 0;
+                e.fireCd = 3;
+                if (laser) laser.visible = false;
+                this.fireEnemyBullet(e.x, e.z, nx * 24, nz * 24, e.dmg);
+                synth.shoot();
+              }
+            }
+          } else if (laser && laser.visible) {
+            laser.visible = false;
+            e.phase = 0;
+            e.stateT = 0;
+          }
+          break;
+        }
+        case 'tinker': {
+          // 修补无人机:远离玩家,给受伤最重的队友回血
+          const want = dist < 6 ? 1 : dist > 9 ? -1 : 0;
+          e.x -= nx * e.speed * want * dt;
+          e.z -= nz * e.speed * want * dt;
+          e.mesh.position.y = 0.15 + Math.sin(time * 2.5 + i) * 0.1;
+          const rotor = e.mesh.userData.rotor as THREE.Mesh | undefined;
+          if (rotor) rotor.rotation.y += dt * 20;
+          e.fireCd -= dt;
+          if (e.fireCd <= 0) {
+            e.fireCd = 1;
+            // 找 6m 内受伤最重的队友
+            let target: Enemy | null = null;
+            let worst = 1;
+            for (const other of this.enemies) {
+              if (other === e || other.kind === 'tinker') continue;
+              const d = Math.hypot(other.x - e.x, other.z - e.z);
+              const ratio = other.hp / other.maxHp;
+              if (d < 6 && ratio < worst) {
+                worst = ratio;
+                target = other;
+              }
+            }
+            if (target) {
+              target.hp = Math.min(target.maxHp, target.hp + 10);
+              const tmp = { x: 0, y: 0 };
+              this.worldToScreen(target.x, target.z, tmp);
+              this.overlay.sparkBurst(tmp.x, tmp.y, 0x7ec86a, 4);
+            }
+          }
+          break;
+        }
         case 'boss': {
           this.updateBoss(e, dt, dist, nx, nz, time);
+          break;
+        }
+        case 'ringmaster': {
+          this.updateRingmaster(e, dt, dist, nx, nz, time);
           break;
         }
       }
@@ -935,6 +1051,67 @@ export class Game {
 
       e.mesh.position.x = e.x;
       e.mesh.position.z = e.z;
+    }
+  }
+
+  /** 人偶剧团长:召唤木偶 + 双臂旋转弹幕 + 环射,二阶段加速 */
+  private updateRingmaster(e: Enemy, dt: number, dist: number, nx: number, nz: number, time: number): void {
+    // 悬浮呼吸
+    e.mesh.position.y = 0.3 + Math.sin(time * 1.5) * 0.15;
+    e.stateT += dt;
+    // 二阶段
+    if (!e.enraged && e.hp < e.maxHp * 0.5) {
+      e.enraged = true;
+      e.speed *= 1.4;
+      synth.explosion();
+      this.stage.shake(1.2);
+      this.overlay.flash(0xff5522, 0.35);
+      const tmp = { x: 0, y: 0 };
+      this.worldToScreen(e.x, e.z, tmp);
+      this.overlay.ring(tmp.x, tmp.y, 0xff5522, 200);
+    }
+    const cdScale = e.enraged ? 0.6 : 1;
+
+    if (e.phase === 0) {
+      e.x += nx * e.speed * dt;
+      e.z += nz * e.speed * dt;
+      if (e.stateT > 2.2 * cdScale) {
+        e.stateT = 0;
+        e.phase = this.rng.int(1, 3);
+      }
+    } else if (e.phase === 1) {
+      // 召唤两只发条木偶
+      this.spawnEnemy('mini', e.x - 1.5, e.z, BALANCE.hpScale(this.floorIndex));
+      this.spawnEnemy('mini', e.x + 1.5, e.z, BALANCE.hpScale(this.floorIndex));
+      e.phase = 0;
+      e.stateT = -1.0 * cdScale;
+    } else if (e.phase === 2) {
+      // 双臂旋转弹幕(1.6s 持续喷射)
+      const arms = e.enraged ? 3 : 2;
+      for (let arm = 0; arm < arms; arm++) {
+        const a = time * 3 + (arm / arms) * Math.PI * 2;
+        if (Math.floor(e.stateT * 8) !== Math.floor((e.stateT - dt) * 8)) {
+          this.fireEnemyBullet(e.x, e.z, Math.sin(a) * 8, Math.cos(a) * 8, 11);
+        }
+      }
+      if (e.stateT > 1.6) {
+        e.phase = 0;
+        e.stateT = -0.8;
+      }
+    } else {
+      // 环射
+      const n = e.enraged ? 16 : 12;
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2 + time;
+        this.fireEnemyBullet(e.x, e.z, Math.sin(a) * 7.5, Math.cos(a) * 7.5, 12);
+      }
+      synth.shoot();
+      e.phase = 0;
+      e.stateT = -1.1 * cdScale;
+    }
+
+    if (this.currentNode) {
+      this.overlay.setBossHp(t('boss2.name'), e.hp / e.maxHp);
     }
   }
 
@@ -1130,6 +1307,10 @@ export class Game {
     }
   }
 
+  private cdMult(): number {
+    return 1 - 0.15 * (loadMeta().upgrades['boiler'] ?? 0);
+  }
+
   private fireEnemyBullet(x: number, z: number, vx: number, vz: number, dmg: number): void {
     const b = this.enemyBullets.find((bb) => !bb.active);
     if (!b) return;
@@ -1154,6 +1335,23 @@ export class Game {
     }
     synth.hit();
     e.hitPop = 1; // 受击挤压
+    // 爆裂弹头:命中点范围波及
+    if (this.stats.boom > 0) {
+      const radius = 1.1 + this.stats.boom * 0.5;
+      const splash = this.stats.damage * 0.3 * this.stats.boom;
+      for (let i2 = this.enemies.length - 1; i2 >= 0; i2--) {
+        if (i2 === idx) continue;
+        const o = this.enemies[i2];
+        if (Math.hypot(o.x - e.x, o.z - e.z) < radius + o.r) {
+          o.hp -= splash;
+          this.overlay.damageNumber(o.x, o.z, splash, false);
+          if (o.hp <= 0) this.killEnemy(i2, true);
+        }
+      }
+      const tmp2 = { x: 0, y: 0 };
+      this.worldToScreen(e.x, e.z, tmp2);
+      this.overlay.ring(tmp2.x, tmp2.y, 0xffb347, radius * 40);
+    }
     this.overlay.damageNumber(e.x, e.z, dmg, crit);
     const tmp = { x: 0, y: 0 };
     this.worldToScreen(e.x, e.z, tmp);
@@ -1180,6 +1378,7 @@ export class Game {
 
     if (byPlayer) {
       this.kills++;
+      if (e.kind === 'boss' || e.kind === 'ringmaster') this.bossKills++;
       // 连击:3 秒窗口内连续击杀
       this.comboCount++;
       this.comboTimer = BALANCE.combo.window;
@@ -1194,7 +1393,7 @@ export class Game {
         }
       } else if (this.rng.chance(BALANCE.drops.heartChance)) {
         this.spawnDrop(e.x, e.z);
-      } else if (this.rng.chance(BALANCE.drops.cogChance)) {
+      } else if (this.rng.chance(BALANCE.drops.cogChance + 0.08 * this.stats.scavenger)) {
         this.spawnDrop(e.x, e.z, 'cog');
       }
     }
@@ -1238,6 +1437,19 @@ export class Game {
       return;
     }
     p.hp -= dmg;
+    // 备用机壳:每局限一次的复活
+    if (p.hp <= 0 && !this.reviveUsed && (loadMeta().upgrades['sparehull'] ?? 0) > 0) {
+      this.reviveUsed = true;
+      p.hp = Math.floor(this.stats.maxHp * 0.5);
+      p.invuln = 2;
+      synth.doorOpen();
+      this.overlay.flash(0xe8c877, 0.5);
+      this.stage.shake(1);
+      const tmp = { x: 0, y: 0 };
+      this.worldToScreen(p.x, p.z, tmp);
+      this.overlay.ring(tmp.x, tmp.y, 0xe8c877, 150);
+      return;
+    }
     p.invuln = 0.7;
     synth.playerHurt();
     this.stage.shake(0.5);
@@ -1405,8 +1617,8 @@ export class Game {
       d.mesh.position.y = 0.5 + Math.sin(time * 3 + i) * 0.15;
       // 磁吸:进入半径后加速飞向玩家
       const distP = Math.hypot(d.x - this.player.x, d.z - this.player.z);
-      if (distP < BALANCE.drops.magnetRadius) {
-        const pull = BALANCE.drops.magnetSpeed * (1.2 - distP / BALANCE.drops.magnetRadius);
+      if (distP < BALANCE.drops.magnetRadius * (1 + 0.5 * this.stats.scavenger)) {
+        const pull = BALANCE.drops.magnetSpeed * (1.2 - distP / (BALANCE.drops.magnetRadius * (1 + 0.5 * this.stats.scavenger)));
         d.x += ((this.player.x - d.x) / (distP || 1)) * pull * dt;
         d.z += ((this.player.z - d.z) / (distP || 1)) * pull * dt;
         d.mesh.position.x = d.x;
@@ -1449,6 +1661,8 @@ export class Game {
     this.overlay.hideBossHp();
 
     if (node.kind === 'boss') {
+      this.overlay.banner(t('boss.defeated'), undefined, 0xe8c877);
+      music.setIntensity(0);
       // 生成通往下一层的出口传送门
       const portal = new THREE.Group();
       const ring = new THREE.Mesh(
@@ -1565,7 +1779,39 @@ export class Game {
     }
   }
 
-  private updateCameraTarget(): void {    const p = this.player;
+  /** 蒸汽喷射机关:3.2s 周期 — 0.7s 预警 → 0.8s 喷发伤害 */
+  private updateSteamJets(dt: number, time: number): void {
+    for (const j of this.steamJets) {
+      j.vent.update(dt, time);
+      j.timer += dt;
+      const cycle = j.timer % 3.2;
+      const ventMesh = j.vent;
+      if (cycle < 0.7) {
+        if (j.phase !== 1) {
+          j.phase = 1;
+          ventMesh.visible = false;
+          const tmp = { x: 0, y: 0 };
+          this.worldToScreen(j.x, j.z, tmp);
+          this.overlay.ring(tmp.x, tmp.y, 0x9fb4c0, 45, 0.7);
+        }
+      } else if (cycle < 1.5) {
+        if (j.phase !== 2) {
+          j.phase = 2;
+          ventMesh.visible = true;
+          synth.dash();
+        }
+        if (this.player.invuln <= 0 && Math.hypot(this.player.x - j.x, this.player.z - j.z) < 1.2) {
+          this.hurtPlayer(8);
+        }
+      } else {
+        j.phase = 0;
+        ventMesh.visible = false;
+      }
+    }
+  }
+
+  private updateCameraTarget(): void {
+    const p = this.player;
     const aspect = window.innerWidth / window.innerHeight;
     const halfW = (CONFIG.viewHeight / 2) * aspect;
     const halfH = CONFIG.viewHeight / 2;

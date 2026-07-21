@@ -166,7 +166,19 @@ export function makePlayerMesh(): THREE.Group {
   return root;
 }
 
-export type EnemyKind = 'chaser' | 'shooter' | 'bomber' | 'dasher' | 'splitter' | 'mini' | 'warden' | 'mortar' | 'boss';
+export type EnemyKind =
+  | 'chaser'
+  | 'shooter'
+  | 'bomber'
+  | 'dasher'
+  | 'splitter'
+  | 'mini'
+  | 'warden'
+  | 'mortar'
+  | 'sniper'
+  | 'tinker'
+  | 'boss'
+  | 'ringmaster';
 
 export function makeEnemyMesh(kind: EnemyKind): THREE.Group {
   const g = buildEnemyMesh(kind);
@@ -180,7 +192,10 @@ export function makeEnemyMesh(kind: EnemyKind): THREE.Group {
     mini: 0.35,
     warden: 0.9,
     mortar: 0.7,
+    sniper: 0.55,
+    tinker: 0.5,
     boss: 1.9,
+    ringmaster: 1.7,
   };
   g.add(makeBlobShadow(shadowR[kind]));
   return g;
@@ -390,6 +405,106 @@ function buildEnemyMesh(kind: EnemyKind): THREE.Group {
         const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.35, 6), ironDarkMat);
         leg.position.set(Math.cos(a) * 0.4, 0.18, Math.sin(a) * 0.4);
         g.add(leg);
+      }
+      return g;
+    }
+    case 'sniper': {
+      // 钟表狙击手:瘦高怀表身 + 长枪管,蓄力时亮出激光线
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.38, 1.1, 8), brassMat);
+      body.position.y = 0.55;
+      g.add(body);
+      // 表盘脸
+      const dial = new THREE.Mesh(new THREE.CircleGeometry(0.2, 12), toonMat(0xd8cdb4));
+      dial.position.set(0, 0.85, 0.31);
+      g.add(dial);
+      const hand = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.16, 0.01), ironDarkMat);
+      hand.geometry.translate(0, 0.08, 0);
+      hand.position.set(0, 0.85, 0.32);
+      g.add(hand);
+      g.userData.hand = hand;
+      // 长枪管
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.1, 8), ironDarkMat);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0.2, 0.6, 0.6);
+      g.add(barrel);
+      // 激光瞄准线(蓄力时显示,由 game 驱动)
+      const laser = new THREE.Mesh(
+        new THREE.BoxGeometry(0.04, 0.04, 1),
+        new THREE.MeshBasicMaterial({ color: 0xff3322, transparent: true, opacity: 0.6 }),
+      );
+      laser.visible = false;
+      laser.userData.noOutline = true;
+      g.add(laser);
+      g.userData.laser = laser;
+      // 尖顶帽
+      const hat = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.35, 8), ironDarkMat);
+      hat.position.y = 1.25;
+      g.add(hat);
+      return g;
+    }
+    case 'tinker': {
+      // 修补无人机:悬浮小铜球 + 旋翼 + 扳手尾
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), copperMat);
+      body.position.y = 0.7;
+      g.add(body);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), glowMat(0x7ec86a, 2.2));
+      eye.position.set(0, 0.72, 0.28);
+      g.add(eye);
+      // 旋翼
+      const rotor = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.03, 0.08), ironDarkMat);
+      rotor.position.y = 1.05;
+      g.add(rotor);
+      g.userData.rotor = rotor;
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.2, 6), ironDarkMat);
+      mast.position.y = 0.95;
+      g.add(mast);
+      // 尾部扳手
+      const wrench = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.03, 5, 8, Math.PI * 1.4), ironMat);
+      wrench.position.set(0, 0.5, -0.3);
+      g.add(wrench);
+      return g;
+    }
+    case 'ringmaster': {
+      // 人偶剧团长:巨型木偶头 + 拉夫领 + 高帽,悬浮
+      const g = new THREE.Group();
+      // 拉夫领(扇形叠环)
+      for (let i = 0; i < 3; i++) {
+        const ruff = new THREE.Mesh(new THREE.TorusGeometry(0.9 + i * 0.18, 0.09, 6, 18), i % 2 === 0 ? brassMat : copperMat);
+        ruff.rotation.x = Math.PI / 2;
+        ruff.position.y = 1.1 - i * 0.12;
+        g.add(ruff);
+      }
+      // 木偶头
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.75, 14, 12), toonMat(0xd8cdb4));
+      head.position.y = 1.9;
+      g.add(head);
+      // 关节缝线(嘴)
+      const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 0.04), ironDarkMat);
+      mouth.position.set(0, 1.7, 0.72);
+      g.add(mouth);
+      for (const side of [-1, 1]) {
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), emberMat);
+        eye.position.set(side * 0.26, 2.05, 0.62);
+        g.add(eye);
+      }
+      // 高帽
+      const hatTop = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.44, 0.8, 10), ironDarkMat);
+      hatTop.position.y = 2.9;
+      g.add(hatTop);
+      const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.08, 12), ironDarkMat);
+      hatBrim.position.y = 2.52;
+      g.add(hatBrim);
+      const hatBand = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.05, 6, 12), brassMat);
+      hatBand.rotation.x = Math.PI / 2;
+      hatBand.position.y = 2.56;
+      g.add(hatBand);
+      // 提线(连到天上,木偶剧氛围)
+      for (const side of [-1, 1]) {
+        const string = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 2.5, 4), ironDarkMat);
+        string.position.set(side * 0.4, 4.6, 0);
+        g.add(string);
       }
       return g;
     }

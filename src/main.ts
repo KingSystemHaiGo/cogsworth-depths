@@ -11,7 +11,8 @@ import { Overlay } from './pixi/overlay.ts';
 import { Game } from './game/game.ts';
 import { synth } from './audio/synth.ts';
 import { music } from './audio/music.ts';
-import { showTitle, showPause, showGameOver, showSettings, SettingsValues } from './ui/screens.ts';
+import { showTitle, showPause, showGameOver, showSettings, showWorkshop, SettingsValues } from './ui/screens.ts';
+import { loadMeta, saveMeta, awardScrap, META_UPGRADES } from './core/meta.ts';
 
 const VOL_KEY = 'cogsworth-volumes';
 
@@ -47,9 +48,13 @@ async function main(): Promise<void> {
   });
 
   const input = new Input(threeCanvas);
+  const meta = loadMeta();
 
   const game = new Game(stage, overlay, input, () => {
     music.stop();
+    // 局外成长:结算齿轮残片
+    meta.scrap += awardScrap(game.kills, game.floorIndex, game.bossKills);
+    saveMeta(meta);
     showGameOver(
       { floor: game.floorIndex, kills: game.kills, timeSec: game.timeSec, seed: game.seed },
       restart,
@@ -79,7 +84,7 @@ async function main(): Promise<void> {
     music.start();
   }
 
-  // 标题界面(可重入:设置返回后再次显示)
+  // 标题界面(可重入:设置/改装间返回后再次显示)
   function showTitleScreen(): void {
     showTitle(
       randomSeed(),
@@ -95,9 +100,31 @@ async function main(): Promise<void> {
         music.start();
       },
       () => openSettings(showTitleScreen),
+      () => openWorkshop(),
+      meta.scrap,
     );
   }
   showTitleScreen();
+
+  function openWorkshop(): void {
+    showWorkshop(
+      meta,
+      (id) => {
+        const u = META_UPGRADES.find((x) => x.id === id)!;
+        const lv = meta.upgrades[id] ?? 0;
+        if (lv >= u.maxLevel) return;
+        const cost = u.cost(lv);
+        if (meta.scrap < cost) return;
+        meta.scrap -= cost;
+        meta.upgrades[id] = lv + 1;
+        saveMeta(meta);
+        // 重绘
+        document.querySelector('.screen')?.remove();
+        openWorkshop();
+      },
+      showTitleScreen,
+    );
+  }
 
   // 暂停(Esc 或鼠标锁丢失时触发——锁定下按 Esc 浏览器会直接解锁,收不到按键)
   let pauseOpen = false;
