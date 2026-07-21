@@ -8,26 +8,58 @@ const brassMat = toonMat(PALETTE.brass);
 const copperMat = toonMat(PALETTE.copper);
 const ironMat = toonMat(PALETTE.iron);
 const ironDarkMat = toonMat(PALETTE.ironDark);
+const leatherMat = toonMat(0x4a3226); // 皮质大衣
+const hatMat = toonMat(0x1c1611); // 高帽黑
 const emberMat = glowMat(PALETTE.ember, 2.5);
 const eyeMat = glowMat(PALETTE.brassLight, 2);
 
-/** 玩家:黄铜步行机器人。userData.body 用于朝向旋转,legL/legR 走路摆动 */
+/** 玩家:瘟疫医生人偶 — 高帽 / 鸟嘴面具 / 护目镜 / 皮质大衣
+ *  userData.attachments 里是升级形态部件(枪管组/护盾泡/烟囱组),
+ *  由 game 按 stats 刷新显示 */
 export function makePlayerMesh(): THREE.Group {
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
 
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 0.7, 10), brassMat);
-  torso.position.y = 0.75;
-  body.add(torso);
+  // 皮质大衣(锥形下摆)
+  const coat = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.56, 0.85, 10), leatherMat);
+  coat.position.y = 0.68;
+  body.add(coat);
+  // 大衣黄铜扣带
+  const belt = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.04, 6, 14), brassMat);
+  belt.rotation.x = Math.PI / 2;
+  belt.position.y = 0.72;
+  body.add(belt);
 
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), copperMat);
-  dome.position.y = 1.1;
-  body.add(dome);
-
-  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), eyeMat);
-  eye.position.set(0, 1.02, 0.42);
-  body.add(eye);
+  // 头部:瘟疫医生面具
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), hatMat);
+  head.position.y = 1.28;
+  body.add(head);
+  // 鸟嘴(圆锥)
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.45, 8), leatherMat);
+  beak.rotation.x = Math.PI / 2;
+  beak.position.set(0, 1.24, 0.42);
+  body.add(beak);
+  // 护目镜(双发光镜片 + 黄铜镜框)
+  for (const side of [-1, 1]) {
+    const lens = new THREE.Mesh(new THREE.SphereGeometry(0.085, 8, 8), eyeMat);
+    lens.position.set(side * 0.13, 1.34, 0.26);
+    body.add(lens);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.025, 6, 12), brassMat);
+    rim.position.set(side * 0.13, 1.34, 0.27);
+    body.add(rim);
+  }
+  // 高礼帽(帽筒 + 帽檐)
+  const hatTop = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.23, 0.34, 10), hatMat);
+  hatTop.position.y = 1.62;
+  body.add(hatTop);
+  const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.05, 12), hatMat);
+  hatBrim.position.y = 1.48;
+  body.add(hatBrim);
+  const hatBand = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.03, 6, 12), brassMat);
+  hatBand.rotation.x = Math.PI / 2;
+  hatBand.position.y = 1.5;
+  body.add(hatBand);
 
   // 背包小齿轮
   const gear = makeGear(0.3, 8, 0.12, 2.2);
@@ -48,11 +80,25 @@ export function makePlayerMesh(): THREE.Group {
   pipe.position.set(-0.06, 0.72, -0.38);
   body.add(pipe);
 
-  // 枪管(朝向 +Z)
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.7, 8), ironDarkMat);
-  barrel.rotation.x = Math.PI / 2;
-  barrel.position.set(0.28, 0.8, 0.55);
-  body.add(barrel);
+  // 枪管组(朝向 +Z):分裂阀升级会增加枪管数量(1/2/3/4)
+  const barrels: THREE.Mesh[] = [];
+  const barrelGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.7, 8);
+  const barrelOffsets = [
+    [0],
+    [-0.12, 0.12],
+    [-0.2, 0, 0.2],
+    [-0.28, -0.09, 0.09, 0.28],
+  ];
+  for (let i = 0; i < 4; i++) {
+    const b = new THREE.Mesh(barrelGeo, ironDarkMat);
+    b.rotation.x = Math.PI / 2;
+    b.position.set(0.28, 0.8, 0.55);
+    b.visible = i === 0;
+    body.add(b);
+    barrels.push(b);
+  }
+  body.userData.barrels = barrels;
+  body.userData.barrelOffsets = barrelOffsets;
 
   // 枪口闪光(开火瞬间点亮)
   const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), glowMat(0xffe6a0, 3));
@@ -62,13 +108,39 @@ export function makePlayerMesh(): THREE.Group {
   body.add(muzzle);
   body.userData.muzzle = muzzle;
 
-  // 肩头烟囱
-  const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.42, 6), ironDarkMat);
-  stack.position.set(-0.32, 1.28, -0.12);
-  body.add(stack);
+  // 烟囱组:蒸汽推进升级让烟囱更高(1/2/3 段)
+  const stacks: THREE.Group[] = [];
+  for (let i = 0; i < 3; i++) {
+    const seg = new THREE.Group();
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.3, 6), ironDarkMat);
+    c.position.y = i * 0.26;
+    seg.add(c);
+    seg.position.set(-0.32, 1.28, -0.12);
+    seg.visible = i === 0;
+    body.add(seg);
+    stacks.push(seg);
+  }
   const stackCap = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.09, 0.08, 6), brassMat);
   stackCap.position.set(-0.32, 1.5, -0.12);
   body.add(stackCap);
+  body.userData.stacks = stacks;
+  body.userData.stackCap = stackCap;
+
+  // 蒸汽护盾泡(护盾升级后显示,半透明黄铜壳)
+  const bubble = new THREE.Mesh(
+    new THREE.SphereGeometry(0.85, 14, 10),
+    new THREE.MeshBasicMaterial({
+      color: 0x9fc8d8,
+      transparent: true,
+      opacity: 0.16,
+      depthWrite: false,
+    }),
+  );
+  bubble.position.y = 0.8;
+  bubble.visible = false;
+  bubble.userData.noOutline = true;
+  root.add(bubble);
+  body.userData.bubble = bubble;
 
   // 胸前压力表(指针在 game 里驱动)
   const gauge = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.035, 6, 14), copperMat);
@@ -192,6 +264,20 @@ function buildEnemyMesh(kind: EnemyKind): THREE.Group {
         leg.rotation.x = -Math.sin(a) * 0.7;
         g.add(leg);
       }
+      // 背后发条钥匙(人偶标志,持续旋转)
+      const keyGroup = new THREE.Group();
+      const keyStem = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.22, 6), brassMat);
+      keyStem.rotation.x = Math.PI / 2;
+      keyGroup.add(keyStem);
+      const wingGeo = new THREE.BoxGeometry(0.22, 0.1, 0.03);
+      for (const side of [-1, 1]) {
+        const wing = new THREE.Mesh(wingGeo, brassMat);
+        wing.position.set(side * 0.11, 0, 0.11);
+        keyGroup.add(wing);
+      }
+      keyGroup.position.set(0, 0.65, -0.55);
+      g.add(keyGroup);
+      g.userData.keyWings = keyGroup;
       return g;
     }
     case 'shooter': {

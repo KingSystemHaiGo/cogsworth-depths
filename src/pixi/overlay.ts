@@ -123,15 +123,19 @@ export class Overlay {
     this.app.stage.addChild(this.hudLayer);
     this.app.stage.addChild(this.flashGfx);
 
-    this.hpText = new Text({ text: '', style: this.hudStyle });
-    this.hpText.position.set(26, 52);
+    this.hpText = new Text({
+      text: '',
+      style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 19, fontWeight: 'bold', fill: 0xe8c877, letterSpacing: 1 }),
+    });
+    this.hpText.anchor.set(0.5, 1);
+    this.hpText.position.set(126, 108);
     this.floorText = new Text({ text: '', style: this.hudStyle });
-    this.floorText.position.set(26, 74);
+    this.floorText.position.set(24, 154);
     this.cogText = new Text({
       text: '',
       style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 16, fontWeight: 'bold', fill: 0xe8c877, letterSpacing: 1 }),
     });
-    this.cogText.position.set(26, 96);
+    this.cogText.position.set(24, 176);
     this.bossText = new Text({
       text: '',
       style: new TextStyle({ fontFamily: 'Georgia, serif', fontSize: 18, fontWeight: 'bold', fill: 0xffb0a0, letterSpacing: 3 }),
@@ -228,15 +232,15 @@ export class Overlay {
     });
   }
 
-  /** Boss 横幅:大号居中文字,2 秒淡入淡出 */
-  banner(str: string): void {
+  /** Boss/楼层横幅:大号居中文字(可带副标题),2 秒淡入淡出 */
+  banner(str: string, sub?: string, tint = 0xffb0a0): void {
     const text = new Text({
       text: str,
       style: new TextStyle({
         fontFamily: 'Georgia, serif',
         fontSize: 46,
         fontWeight: 'bold',
-        fill: 0xffb0a0,
+        fill: tint,
         letterSpacing: 6,
         stroke: { color: 0x1a0a08, width: 6 },
         dropShadow: { color: 0xff3300, blur: 16, distance: 0 },
@@ -246,6 +250,23 @@ export class Overlay {
     text.position.set(this.app.screen.width / 2, this.app.screen.height * 0.3);
     this.fxLayer.addChild(text);
     this.banners.push({ text, t: 0 });
+    if (sub) {
+      const subText = new Text({
+        text: sub,
+        style: new TextStyle({
+          fontFamily: 'Georgia, serif',
+          fontSize: 19,
+          fontStyle: 'italic',
+          fill: 0xd8c9a3,
+          letterSpacing: 2,
+          stroke: { color: 0x0a0e12, width: 4 },
+        }),
+      });
+      subText.anchor.set(0.5);
+      subText.position.set(this.app.screen.width / 2, this.app.screen.height * 0.3 + 52);
+      this.fxLayer.addChild(subText);
+      this.banners.push({ text: subText, t: 0 });
+    }
   }
 
   /** 漂浮文字(价格标签/提示),不消失直到 clearFx */
@@ -335,32 +356,47 @@ export class Overlay {
   // ---------- HUD ----------
 
   setHUD(hp: number, maxHp: number, floorIdx: number, roomLabel: string, cogs = 0): void {
-    const w = 230;
-    const h = 16;
-    this.hpBar.clear();
-    // 黄铜框面板
-    this.hpBar.roundRect(16, 14, w + 12, h + 12, 5).fill({ color: 0x10151b, alpha: 0.85 });
-    this.hpBar.roundRect(16, 14, w + 12, h + 12, 5).stroke({ color: 0xb08d57, width: 2 });
-    // 框角铆钉
-    for (const [cx, cy] of [
-      [20, 18],
-      [16 + w + 8, 18],
-      [20, 14 + h + 8],
-      [16 + w + 8, 14 + h + 8],
+    const g = this.hpBar;
+    g.clear();
+    const cx = 126;
+    const cy = 118;
+    const r = 76;
+    // 背板(铆钉铁牌)
+    g.roundRect(16, 14, 252, 136, 8).fill({ color: 0x10151b, alpha: 0.85 });
+    g.roundRect(16, 14, 252, 136, 8).stroke({ color: 0xb08d57, width: 2 });
+    for (const [rx, ry] of [
+      [24, 22],
+      [260, 22],
+      [24, 142],
+      [260, 142],
     ]) {
-      this.hpBar.circle(cx, cy, 2).fill(0xe8c877);
+      g.circle(rx, ry, 2.5).fill(0xe8c877);
     }
+    // 压力表盘:半圆轨道 + 量程弧
+    g.arc(cx, cy, r, Math.PI, Math.PI * 2).stroke({ color: 0x2a3440, width: 13, cap: 'butt' });
     const ratio = Math.max(0, hp / maxHp);
     if (ratio > 0) {
-      this.hpBar
-        .roundRect(23, 21, (w - 2) * ratio, h - 2, 2)
-        .fill(ratio > 0.35 ? 0x8fd07a : 0xe0604d);
-      // 刻度线
-      for (let i = 1; i < 4; i++) {
-        const x = 23 + ((w - 2) / 4) * i;
-        this.hpBar.moveTo(x, 21).lineTo(x, 21 + h - 2).stroke({ color: 0x10151b, width: 1.5 });
-      }
+      g.arc(cx, cy, r, Math.PI, Math.PI + ratio * Math.PI).stroke({
+        color: ratio > 0.35 ? 0x8fd07a : 0xe0604d,
+        width: 13,
+        cap: 'butt',
+      });
     }
+    // 刻度
+    for (let i = 0; i <= 4; i++) {
+      const a = Math.PI + (i / 4) * Math.PI;
+      g.moveTo(cx + Math.cos(a) * (r - 12), cy + Math.sin(a) * (r - 12))
+        .lineTo(cx + Math.cos(a) * (r + 5), cy + Math.sin(a) * (r + 5))
+        .stroke({ color: 0xb08d57, width: 2 });
+    }
+    // 指针
+    const na = Math.PI + ratio * Math.PI;
+    g.moveTo(cx, cy)
+      .lineTo(cx + Math.cos(na) * (r - 18), cy + Math.sin(na) * (r - 18))
+      .stroke({ color: 0xe8c877, width: 4 });
+    g.circle(cx, cy, 7).fill(0xe8c877);
+    g.circle(cx, cy, 3).fill(0x10151b);
+
     this.hpText.text = `${Math.ceil(hp)} / ${maxHp}`;
     this.floorText.text = `${t('hud.floor', { n: floorIdx })} · ${roomLabel}`;
     this.cogText.text = `⚙ ${cogs}`;
@@ -465,7 +501,7 @@ export class Overlay {
     const w = 86;
     const h = 7;
     const x = 22;
-    const y = 118;
+    const y = 198;
     const draw = (yy: number, ratio: number, color: number, ready: boolean) => {
       g.roundRect(x, yy, w, h, 2).fill({ color: 0x10151b, alpha: 0.8 });
       g.roundRect(x, yy, w, h, 2).stroke({ color: 0x7a6540, width: 1 });
@@ -515,7 +551,7 @@ export class Overlay {
     const tmp = { x: 0, y: 0 };
 
     // 自适应布局:状态面板锚定左下角
-    this.statusPanel.position.set(10, this.app.screen.height - 152);
+    this.statusPanel.position.set(10, this.app.screen.height - 230);
 
     // 升级界面动画
     this.upgradeScreen.update(dt);

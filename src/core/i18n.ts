@@ -58,6 +58,17 @@ const TEXTS = {
   'hud.combo': { zh: '连击', en: 'combo' },
   'hud.wave': { zh: '第 {a}/{b} 波', en: 'Wave {a}/{b}' },
 
+  // 剧情:每层的名字与医生日志
+  'floor.1': { zh: '雾都下水道', en: 'Fog City Sewers' },
+  'floor.1.lore': { zh: '瘟疫带走了城市,机器却还在运转。', en: 'The plague took the city. The machines never stopped.' },
+  'floor.2': { zh: '齿轮工厂', en: 'The Cogworks' },
+  'floor.2.lore': { zh: '人偶们在装配线上永不疲倦。', en: 'The dolls never tire on the assembly line.' },
+  'floor.3': { zh: '人偶剧场', en: 'Clockwork Theatre' },
+  'floor.3.lore': { zh: '没有观众的演出,已经进行了十年。', en: 'A performance with no audience, ten years running.' },
+  'floor.4': { zh: '锅炉之心', en: 'The Boiler Heart' },
+  'floor.4.lore': { zh: '它在做梦。让它睡回去。', en: 'It dreams. Put it back to sleep.' },
+  'doctor.title': { zh: '疫医的日志', en: "Plague Doctor's Log" },
+
   'boss.name': { zh: '锅炉魔像 · 柯格斯沃斯', en: 'Boiler Golem · COGSWORTH' },
 
   'shop.chest': { zh: '⚙ 改装宝箱', en: '⚙ Upgrade Chest' },

@@ -209,6 +209,11 @@ export class Game {
     const roomCount = BALANCE.roomCount(this.floorIndex);
     this.floor = generateFloor(this.rng, roomCount);
     this.loadRoom(this.floor.startId, null);
+    // 楼层剧情横幅:层名 + 疫医日志
+    const fi = Math.min(this.floorIndex, 4);
+    const key = `floor.${fi}` as 'floor.1' | 'floor.2' | 'floor.3' | 'floor.4';
+    const loreKey = `${key}.lore` as 'floor.1.lore' | 'floor.2.lore' | 'floor.3.lore' | 'floor.4.lore';
+    this.overlay.banner(t(key), t(loreKey), 0xe8c877);
   }
 
   private loadRoom(nodeId: number, enterFrom: DoorSide | null): void {
@@ -512,6 +517,7 @@ export class Game {
 
     this.updatePets(dt, time);
     this.updateInteractives(dt, time);
+    this.refreshPlayerAttachments();
     // 敌人头顶血条(只显示受伤的,Boss 用底部大血条)
     this.enemyHpList.length = 0;
     for (const e of this.enemies) {
@@ -793,6 +799,9 @@ export class Game {
           e.mesh.rotation.y = Math.atan2(nx, nz);
           const gear = e.mesh.userData.gear as THREE.Mesh | undefined;
           if (gear) gear.rotation.z += dt * 1.6;
+          // 发条钥匙持续旋转
+          const keyW = e.mesh.userData.keyWings as THREE.Group | undefined;
+          if (keyW) keyW.rotation.z += dt * 4;
           break;
         }
         case 'shooter': {
@@ -1530,8 +1539,33 @@ export class Game {
     return { x, z };
   }
 
-  private updateCameraTarget(): void {
-    const p = this.player;
+  /** 升级形态变化:分裂阀加枪管 / 蒸汽推进加烟囱 / 护盾显示能量泡 */
+  private refreshPlayerAttachments(): void {
+    const body = this.player.mesh?.userData.body as THREE.Group | undefined;
+    if (!body) return;
+    // 枪管组:1 + multiShot 根
+    const barrels = body.userData.barrels as THREE.Mesh[];
+    const offsets = body.userData.barrelOffsets as number[][];
+    const n = Math.min(4, 1 + this.stats.multiShot);
+    const off = offsets[n - 1];
+    barrels.forEach((b, i) => {
+      b.visible = i < n;
+      if (i < n) b.position.x = 0.28 + (off[i] ?? 0);
+    });
+    // 烟囱段数:蒸汽推进每级 +1
+    const speedLv = Math.min(2, this.upgradeCounts.get('speed') ?? 0);
+    const stacks = body.userData.stacks as THREE.Group[];
+    stacks.forEach((s, i) => (s.visible = i <= speedLv));
+    (body.userData.stackCap as THREE.Mesh).position.y = 1.5 + speedLv * 0.26;
+    // 护盾能量泡(充能完毕时显示,缓慢呼吸)
+    const bubble = body.userData.bubble as THREE.Mesh;
+    bubble.visible = this.stats.shield > 0 && this.player.shieldUp;
+    if (bubble.visible) {
+      bubble.scale.setScalar(1 + Math.sin(performance.now() / 300) * 0.03);
+    }
+  }
+
+  private updateCameraTarget(): void {    const p = this.player;
     const aspect = window.innerWidth / window.innerHeight;
     const halfW = (CONFIG.viewHeight / 2) * aspect;
     const halfH = CONFIG.viewHeight / 2;
