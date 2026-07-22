@@ -1,0 +1,18 @@
+{
+  "summary": {
+    "total": 0,
+    "errors": 0,
+    "warns": 0
+  },
+  "metrics": {
+    "bootMs": 1464,
+    "titleFps": 165.33333333333334,
+    "combat": {
+      "avg": 6.053333333134651,
+      "max": 7,
+      "over33": 0
+    },
+    "heapMB": "NaN"
+  },
+  "issues": []
+}
