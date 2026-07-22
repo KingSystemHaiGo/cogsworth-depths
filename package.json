@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build --outDir docs && vite build --outDir docs --config vite.showcase.config.ts && vite build --outDir dist",
     "preview": "vite preview",
-    "test:smoke": "node tools/smoke-test.mts"
+    "test:smoke": "node tools/smoke-test.mts",
+    "test:play": "node tools/playthrough.mts"
   },
   "dependencies": {
     "lil-gui": "^0.20.0",
