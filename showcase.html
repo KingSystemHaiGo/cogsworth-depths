@@ -31,10 +31,47 @@
         text-shadow: 0 0 14px rgba(232, 200, 119, 0.5);
         pointer-events: none;
       }
-      #mode {
+      #info {
         position: fixed;
-        right: 16px;
-        top: 12px;
+        left: 18px;
+        top: 60px;
+        color: #d8c9a3;
+        font-size: 14px;
+        line-height: 1.9;
+        text-shadow: 0 1px 3px #000;
+        pointer-events: none;
+      }
+      #info b { color: #e8c877; font-size: 18px; letter-spacing: 2px; }
+      #counter {
+        position: fixed;
+        right: 18px;
+        top: 60px;
+        color: #9a8a68;
+        font-size: 15px;
+        pointer-events: none;
+      }
+      .nav-btn {
+        position: fixed;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        border: 2px solid #b08d57;
+        background: rgba(16, 21, 27, 0.7);
+        color: #e8c877;
+        font-size: 22px;
+        cursor: pointer;
+        z-index: 20;
+      }
+      .nav-btn:hover { background: rgba(176, 141, 87, 0.3); }
+      #prev { left: 18px; }
+      #next { right: 18px; }
+      #hint {
+        position: fixed;
+        bottom: 14px;
+        left: 50%;
+        transform: translateX(-50%);
         color: #9a8a68;
         font-size: 13px;
         pointer-events: none;
@@ -45,9 +82,12 @@
     <div id="app">
       <canvas id="three-canvas"></canvas>
       <canvas id="pixi-canvas"></canvas>
-      <div id="labels"></div>
-      <div id="hud-title">展 示 台</div>
-      <div id="mode">滚动切换:模型展 / HUD 演示</div>
+      <div id="hud-title">模 型 展 示 台</div>
+      <div id="info"></div>
+      <div id="counter"></div>
+      <button class="nav-btn" id="prev">←</button>
+      <button class="nav-btn" id="next">→</button>
+      <div id="hint">← → / A D / 滚轮 切换 · 右上角面板精调</div>
     </div>
     <script type="module" src="/src/showcase/main.ts"></script>
   </body>
